@@ -26,6 +26,7 @@ export default function Home() {
       .order('data', { ascending: true })
     if (!error && data) setTreinos(data)
     setLoading(false)
+    return true
   }
 
   function abrirChat(treino: Treino) {
@@ -49,7 +50,7 @@ export default function Home() {
           <div style={{ width: 28, height: 28, background: '#1D9E75', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ color: '#fff', fontSize: 16 }}>🏃</span>
           </div>
-          <span style={{ fontSize: 17, fontWeight: 600, color: '#111' }}>Juntô</span>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#111', fontFamily: "'Barlow', sans-serif" }}>Junto</span>
         </div>
       </div>
 
@@ -63,7 +64,7 @@ export default function Home() {
           <button
             key={n.id}
             onClick={() => setTab(n.id as any)}
-            style={{ flex: 1, padding: '10px 4px', fontSize: 12, color: tab === n.id ? '#1D9E75' : '#888', background: 'none', border: 'none', borderBottom: `2px solid ${tab === n.id ? '#1D9E75' : 'transparent'}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}
+            style={{ flex: 1, padding: '10px 4px', fontSize: 12, color: tab === n.id ? '#1D9E75' : '#888', background: 'none', border: 'none', borderBottom: `2px solid ${tab === n.id ? '#1D9E75' : 'transparent'}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontFamily: "'Barlow', sans-serif" }}
           >
             <span style={{ fontSize: 18 }}>{n.emoji}</span>
             {n.label}
