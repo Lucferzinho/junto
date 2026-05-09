@@ -36,7 +36,8 @@ export default function CriarTreino({ onCriado }: Props) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { alert('Faça login para criar um treino!'); setSalvando(false); return }
 
-    const { error } = await supabase.from('treinos').insert({
+    // Cria o treino
+    const { data: treino, error } = await supabase.from('treinos').insert({
       criador_id: user.id,
       titulo: form.titulo,
       data: form.data,
@@ -50,23 +51,28 @@ export default function CriarTreino({ onCriado }: Props) {
       aberto_iniciantes: form.iniciantes,
       descricao: form.descricao,
       status: 'ativo'
-    })
+    }).select('id').single()
+
+    if (error) { alert('Erro ao publicar: ' + error.message); setSalvando(false); return }
+
+    // Inscreve o criador automaticamente
+    if (treino) {
+      await supabase.from('inscricoes').insert({ treino_id: treino.id, usuario_id: user.id })
+    }
 
     setSalvando(false)
-    if (error) { alert('Erro ao publicar: ' + error.message); return }
-
     setSucesso(true)
     setForm({ titulo:'', data:'', horario:'06:30', local:'', km:'', max:'10', tipo:'Long run', pace:'5:00–5:30', tom:'Leve e papo', iniciantes:true, descricao:'' })
     setTimeout(() => { setSucesso(false); onCriado() }, 1500)
   }
 
-  const inp = { width:'100%', padding:'9px 12px', border:'1px solid #ddd', borderRadius:8, fontSize:14, background:'#fff', color:'#111', outline:'none', fontFamily:'inherit' } as React.CSSProperties
-  const lbl = { fontSize:12, color:'#666', display:'block', marginBottom:5 } as React.CSSProperties
+  const inp = { width:'100%', padding:'9px 12px', border:'1px solid #ddd', borderRadius:8, fontSize:14, background:'#fff', color:'#111', outline:'none', fontFamily:"'Barlow', sans-serif" } as React.CSSProperties
+  const lbl = { fontSize:12, color:'#666', display:'block', marginBottom:5, fontWeight:600 } as React.CSSProperties
 
   return (
-    <div style={{ padding:16, display:'flex', flexDirection:'column', gap:14 }}>
+    <div style={{ padding:16, display:'flex', flexDirection:'column', gap:14, fontFamily:"'Barlow', sans-serif" }}>
       {sucesso && (
-        <div style={{ background:'#E1F5EE', color:'#085041', borderRadius:10, padding:'12px 16px', fontSize:14, fontWeight:500, display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ background:'#E1F5EE', color:'#085041', borderRadius:10, padding:'12px 16px', fontSize:14, fontWeight:600, display:'flex', alignItems:'center', gap:8 }}>
           ✅ Treino publicado! Aparecendo no feed.
         </div>
       )}
@@ -96,7 +102,7 @@ export default function CriarTreino({ onCriado }: Props) {
         <label style={lbl}>Pace estimado do grupo</label>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           {PACES.map(p => (
-            <button key={p} onClick={() => set('pace', p)} style={{ padding:'6px 13px', borderRadius:20, border:`1px solid ${form.pace===p ? '#1D9E75' : '#ddd'}`, background: form.pace===p ? '#E1F5EE' : '#fff', color: form.pace===p ? '#085041' : '#666', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>
+            <button key={p} onClick={() => set('pace', p)} style={{ padding:'6px 13px', borderRadius:20, border:`1px solid ${form.pace===p ? '#1D9E75' : '#ddd'}`, background: form.pace===p ? '#E1F5EE' : '#fff', color: form.pace===p ? '#085041' : '#666', fontSize:12, cursor:'pointer', fontFamily:"'Barlow', sans-serif", fontWeight: form.pace===p ? 700 : 500 }}>
               {p}
             </button>
           ))}
@@ -110,7 +116,7 @@ export default function CriarTreino({ onCriado }: Props) {
             const s = TOM_SEL[t]
             const sel = form.tom === t
             return (
-              <button key={t} onClick={() => set('tom', t)} style={{ padding:'6px 13px', borderRadius:20, border:`1px solid ${sel ? s.border : '#ddd'}`, background: sel ? s.bg : '#fff', color: sel ? s.color : '#666', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>
+              <button key={t} onClick={() => set('tom', t)} style={{ padding:'6px 13px', borderRadius:20, border:`1px solid ${sel ? s.border : '#ddd'}`, background: sel ? s.bg : '#fff', color: sel ? s.color : '#666', fontSize:12, cursor:'pointer', fontFamily:"'Barlow', sans-serif", fontWeight: sel ? 700 : 500 }}>
                 {t}
               </button>
             )
@@ -120,7 +126,7 @@ export default function CriarTreino({ onCriado }: Props) {
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px', border:'1px solid #ddd', borderRadius:8 }}>
         <div>
-          <div style={{ fontSize:13, fontWeight:500, color:'#111' }}>Aberto a iniciantes</div>
+          <div style={{ fontSize:13, fontWeight:700, color:'#111' }}>Aberto a iniciantes</div>
           <div style={{ fontSize:12, color:'#888', marginTop:2 }}>Aparece com o selo no feed</div>
         </div>
         <div onClick={() => set('iniciantes', !form.iniciantes)} style={{ width:36, height:20, background: form.iniciantes ? '#1D9E75' : '#ddd', borderRadius:20, position:'relative', cursor:'pointer', transition:'background .2s' }}>
@@ -130,7 +136,7 @@ export default function CriarTreino({ onCriado }: Props) {
 
       <div><label style={lbl}>Descrição do percurso</label><textarea rows={3} style={{ ...inp, resize:'vertical' }} placeholder="Descreva o trajeto, pontos de parada, estratégia..." value={form.descricao} onChange={e => set('descricao', e.target.value)} /></div>
 
-      <button onClick={publicar} disabled={salvando} style={{ background: salvando ? '#ccc' : '#1D9E75', color:'#fff', border:'none', borderRadius:8, padding:13, fontSize:15, cursor: salvando ? 'not-allowed' : 'pointer', fontWeight:600, fontFamily:'inherit' }}>
+      <button onClick={publicar} disabled={salvando} style={{ background: salvando ? '#ccc' : '#1D9E75', color:'#fff', border:'none', borderRadius:8, padding:13, fontSize:15, cursor: salvando ? 'not-allowed' : 'pointer', fontWeight:700, fontFamily:"'Barlow', sans-serif" }}>
         {salvando ? 'Publicando...' : '🏃 Publicar treino'}
       </button>
     </div>
