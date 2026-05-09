@@ -57,8 +57,12 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     e.stopPropagation()
     if (!userId) { alert('Faça login para participar!'); return }
     setCarregando(treino.id)
-    const { error } = await supabase.from('inscricoes').insert({ treino_id: treino.id, usuario_id: userId })
+    const { error, data: nova } = await supabase.from('inscricoes').insert({ treino_id: treino.id, usuario_id: userId }).select('id').single()
     if (error) { alert('Erro ao se inscrever: ' + error.message); setCarregando(null); return }
+
+    // Atualiza inscrições localmente
+    if (nova) setInscricoes(prev => ({ ...prev, [treino.id]: nova.id }))
+
     const { data: usuario } = await supabase.from('usuarios').select('nome').eq('id', userId).single()
     const { data: { user } } = await supabase.auth.getUser()
     await fetch('/api/email', {
@@ -81,6 +85,14 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     const inscricaoId = inscricoes[treino.id]
     const { error } = await supabase.from('inscricoes').delete().eq('id', inscricaoId)
     if (error) { alert('Erro ao sair: ' + error.message); setCarregando(null); return }
+
+    // Atualiza inscrições localmente
+    setInscricoes(prev => {
+      const novo = { ...prev }
+      delete novo[treino.id]
+      return novo
+    })
+
     await onAtualizar()
     setCarregando(null)
   }
@@ -126,12 +138,15 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
         const nomeHost = (r as any).usuarios?.nome || 'Corredor'
         const avatarUrl = (r as any).usuarios?.avatar_url
 
+        // Verifica se o treino é hoje
+        const hoje = new Date().toISOString().split('T')[0]
+        const isHoje = r.data === hoje
+
         return (
           <div key={r.id} onClick={() => onAbrirChat(r)} style={{ padding: 16, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {/* Avatar do criador */}
                 {avatarUrl
                   ? <img src={avatarUrl} alt={nomeHost} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                   : <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E1F5EE', color: '#085041', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
@@ -146,6 +161,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', flexShrink: 0 }}>
+                {isHoje && <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#FFF3E0', color: '#E65100', fontWeight: 700 }}>🔥 Hoje!</span>}
                 <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: full ? '#FAEEDA' : '#E1F5EE', color: full ? '#633806' : '#085041', fontWeight: 700 }}>
                   {full ? 'Lotado' : 'Vagas abertas'}
                 </span>
