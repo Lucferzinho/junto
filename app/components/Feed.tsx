@@ -30,11 +30,38 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
   async function participar(e: React.MouseEvent, treino: Treino) {
     e.stopPropagation()
     setInscrevendo(treino.id)
+
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { alert('Faça login para participar!'); setInscrevendo(null); return }
+
+    // Inscreve no treino
     const { error } = await supabase.from('inscricoes').insert({ treino_id: treino.id, usuario_id: user.id })
-    if (error) alert('Erro ao se inscrever: ' + error.message)
-    else { alert('Inscrito com sucesso! Verifique seu email.'); onAtualizar() }
+    if (error) { alert('Erro ao se inscrever: ' + error.message); setInscrevendo(null); return }
+
+    // Busca dados do usuário para o email
+    const { data: usuario } = await supabase.from('usuarios').select('nome').eq('id', user.id).single()
+
+    // Envia email de confirmação
+    await fetch('/api/email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: user.email,
+        nome: usuario?.nome || 'Corredor',
+        treino: {
+          titulo: treino.titulo,
+          data: fmtData(treino.data),
+          horario: treino.horario?.slice(0, 5),
+          local: treino.local,
+          km: treino.km,
+          pace: treino.pace,
+          tom: treino.tom,
+        }
+      })
+    })
+
+    alert('Inscrito! Verifique seu email para os detalhes do treino.')
+    onAtualizar()
     setInscrevendo(null)
   }
 
@@ -72,7 +99,6 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
             onClick={() => onAbrirChat(r)}
             style={{ padding: 16, borderBottom: '1px solid #eee', cursor: 'pointer' }}
           >
-            {/* Topo */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: '#111', marginBottom: 2 }}>{r.titulo}</div>
@@ -93,7 +119,6 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               </div>
             </div>
 
-            {/* Meta */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
               {[
                 { e: '📅', t: `${fmtData(r.data)} · ${r.horario?.slice(0,5)}` },
@@ -107,7 +132,6 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               ))}
             </div>
 
-            {/* Bottom */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', marginLeft: 6 }}>
                 {inits.map((init, i) => (
