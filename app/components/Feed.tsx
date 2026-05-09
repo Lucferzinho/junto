@@ -21,8 +21,7 @@ function inscricoesEncerradas(data: string, horario: string) {
   if (!data || !horario) return false
   const treino = new Date(`${data}T${horario}`)
   const agora = new Date()
-  const diff = treino.getTime() - agora.getTime()
-  return diff < 15 * 60 * 1000 // menos de 15 minutos
+  return treino.getTime() - agora.getTime() < 15 * 60 * 1000
 }
 
 const TOM_STYLE: Record<string, { bg: string; color: string }> = {
@@ -41,6 +40,7 @@ type Props = {
 export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Props) {
   const [userId, setUserId] = useState<string | null>(null)
   const [inscricoes, setInscricoes] = useState<Record<string, string>>({})
+  const [listaEspera, setListaEspera] = useState<Record<string, string>>({})
   const [carregando, setCarregando] = useState<string | null>(null)
 
   useEffect(() => {
@@ -48,6 +48,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
       if (data.user) {
         setUserId(data.user.id)
         carregarInscricoes(data.user.id)
+        carregarListaEspera(data.user.id)
       }
     })
   }, [treinos])
@@ -58,6 +59,15 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
       const map: Record<string, string> = {}
       data.forEach(i => { map[i.treino_id] = i.id })
       setInscricoes(map)
+    }
+  }
+
+  async function carregarListaEspera(uid: string) {
+    const { data } = await supabase.from('lista_espera').select('id, treino_id').eq('usuario_id', uid)
+    if (data) {
+      const map: Record<string, string> = {}
+      data.forEach(i => { map[i.treino_id] = i.id })
+      setListaEspera(map)
     }
   }
 
@@ -87,10 +97,17 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     e.stopPropagation()
     if (!confirm('Tem certeza que quer sair deste treino?')) return
     setCarregando(treino.id)
-    const inscricaoId = inscricoes[treino.id]
-    const { error } = await supabase.from('inscricoes').delete().eq('id', inscricaoId)
+    const { error } = await supabase.from('inscricoes').delete().eq('id', inscricoes[treino.id])
     if (error) { alert('Erro ao sair: ' + error.message); setCarregando(null); return }
     setInscricoes(prev => { const n = { ...prev }; delete n[treino.id]; return n })
+
+    // Avisa quem está na lista de espera
+    await fetch('/api/vaga-aberta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ treino_id: treino.id, titulo: treino.titulo, data: fmtData(treino.data), horario: treino.horario?.slice(0,5), local: treino.local })
+    })
+
     await onAtualizar()
     setCarregando(null)
   }
@@ -102,6 +119,25 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     const { error } = await supabase.from('treinos').update({ status: 'cancelado' }).eq('id', treino.id)
     if (error) { alert('Erro ao cancelar: ' + error.message); setCarregando(null); return }
     await onAtualizar()
+    setCarregando(null)
+  }
+
+  async function entrarListaEspera(e: React.MouseEvent, treino: Treino) {
+    e.stopPropagation()
+    if (!userId) { alert('Faça login para entrar na lista de espera!'); return }
+    setCarregando(treino.id + '-espera')
+    const { error, data: nova } = await supabase.from('lista_espera').insert({ treino_id: treino.id, usuario_id: userId }).select('id').single()
+    if (error) { alert('Erro: ' + error.message); setCarregando(null); return }
+    if (nova) setListaEspera(prev => ({ ...prev, [treino.id]: nova.id }))
+    setCarregando(null)
+  }
+
+  async function sairListaEspera(e: React.MouseEvent, treino: Treino) {
+    e.stopPropagation()
+    setCarregando(treino.id + '-espera')
+    const { error } = await supabase.from('lista_espera').delete().eq('id', listaEspera[treino.id])
+    if (error) { alert('Erro: ' + error.message); setCarregando(null); return }
+    setListaEspera(prev => { const n = { ...prev }; delete n[treino.id]; return n })
     setCarregando(null)
   }
 
@@ -133,6 +169,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
         const tom = TOM_STYLE[r.tom] ?? TOM_STYLE['Qualquer nível']
         const isCriador = userId === r.criador_id
         const isInscrito = !!inscricoes[r.id]
+        const naEspera = !!listaEspera[r.id]
         const nomeHost = (r as any).usuarios?.nome || 'Corredor'
         const avatarUrl = (r as any).usuarios?.avatar_url
         const hoje = new Date().toISOString().split('T')[0]
@@ -165,13 +202,9 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
                       {full ? 'Lotado' : 'Vagas abertas'}
                     </span>
                 }
-                <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: tom.bg, color: tom.color, fontWeight: 600 }}>
-                  {r.tom}
-                </span>
+                <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: tom.bg, color: tom.color, fontWeight: 600 }}>{r.tom}</span>
                 {r.aberto_iniciantes && (
-                  <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#EAF3DE', color: '#27500A', fontWeight: 600 }}>
-                    Iniciantes bem-vindos
-                  </span>
+                  <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#EAF3DE', color: '#27500A', fontWeight: 600 }}>Iniciantes bem-vindos</span>
                 )}
               </div>
             </div>
@@ -189,7 +222,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               ))}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ display: 'flex', marginLeft: 6 }}>
                   {Array.from({ length: Math.min(inscritos, 4) }).map((_, i) => (
@@ -206,25 +239,41 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
                 <span style={{ fontSize: 12, color: '#aaa', fontWeight: 600 }}>{inscritos}/{r.max_pessoas}</span>
               </div>
 
-              <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
+                {/* Criador pode cancelar */}
                 {isCriador && (
                   <button onClick={e => cancelarTreino(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #ffcccc', color: '#cc3333', background: '#fff8f8', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
                     {carregando === r.id ? '...' : 'Cancelar treino'}
                   </button>
                 )}
+
+                {/* Inscrito pode sair */}
                 {isInscrito && (
                   <button onClick={e => sairDoTreino(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
                     {carregando === r.id ? '...' : 'Sair'}
                   </button>
                 )}
+
+                {/* Inscrições encerradas */}
+                {!isInscrito && encerrado && (
+                  <span style={{ fontSize: 12, color: '#1D9E75', fontWeight: 700 }}>Inscrições encerradas. Bom treino! 🏃</span>
+                )}
+
+                {/* Lotado — lista de espera */}
+                {!isInscrito && full && !encerrado && (
+                  naEspera
+                    ? <button onClick={e => sairListaEspera(e, r)} disabled={carregando === r.id + '-espera'} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
+                        ✅ Na fila de espera
+                      </button>
+                    : <button onClick={e => entrarListaEspera(e, r)} disabled={carregando === r.id + '-espera'} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #1D9E75', color: '#1D9E75', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontFamily: "'Barlow', sans-serif" }}>
+                        🔔 Avisar se abrir vaga
+                      </button>
+                )}
+
+                {/* Participar */}
                 {!isInscrito && !full && !encerrado && (
                   <button onClick={e => participar(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 14px', border: '1px solid #1D9E75', color: '#1D9E75', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontFamily: "'Barlow', sans-serif" }}>
                     {carregando === r.id ? 'Aguarde...' : 'Participar'}
-                  </button>
-                )}
-                {!isInscrito && (full || encerrado) && (
-                  <button disabled style={{ fontSize: 12, padding: '5px 14px', border: '1px solid #ddd', color: '#ccc', background: 'none', borderRadius: 8, cursor: 'default', fontFamily: "'Barlow', sans-serif" }}>
-                    {full ? 'Lista cheia' : 'Encerrado'}
                   </button>
                 )}
               </div>
