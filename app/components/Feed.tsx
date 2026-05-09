@@ -10,6 +10,13 @@ function fmtData(d: string) {
   return `${parseInt(dia)} ${MESES[parseInt(m) - 1]}`
 }
 
+function initials(nome: string) {
+  if (!nome) return '?'
+  const parts = nome.trim().split(' ')
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 const TOM_STYLE: Record<string, { bg: string; color: string }> = {
   'Leve e papo':    { bg: '#E6F1FB', color: '#0C447C' },
   'Focado':         { bg: '#FBEAF0', color: '#72243E' },
@@ -50,13 +57,10 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     e.stopPropagation()
     if (!userId) { alert('Faça login para participar!'); return }
     setCarregando(treino.id)
-
     const { error } = await supabase.from('inscricoes').insert({ treino_id: treino.id, usuario_id: userId })
     if (error) { alert('Erro ao se inscrever: ' + error.message); setCarregando(null); return }
-
     const { data: usuario } = await supabase.from('usuarios').select('nome').eq('id', userId).single()
     const { data: { user } } = await supabase.auth.getUser()
-
     await fetch('/api/email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -66,7 +70,6 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
         treino: { titulo: treino.titulo, data: fmtData(treino.data), horario: treino.horario?.slice(0,5), local: treino.local, km: treino.km, pace: treino.pace, tom: treino.tom }
       })
     })
-
     await onAtualizar()
     setCarregando(null)
   }
@@ -120,15 +123,26 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
         const tom = TOM_STYLE[r.tom] ?? TOM_STYLE['Qualquer nível']
         const isCriador = userId === r.criador_id
         const isInscrito = !!inscricoes[r.id]
+        const nomeHost = (r as any).usuarios?.nome || 'Corredor'
+        const avatarUrl = (r as any).usuarios?.avatar_url
 
         return (
           <div key={r.id} onClick={() => onAbrirChat(r)} style={{ padding: 16, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
-              <div>
-                <div style={{ fontSize: 17, fontWeight: 800, color: '#111', marginBottom: 2, lineHeight: 1.2 }}>{r.titulo}</div>
-                <div style={{ fontSize: 12, color: '#aaa', fontWeight: 500 }}>
-                  {isCriador ? '⭐ criado por você' : `por corredor`}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Avatar do criador */}
+                {avatarUrl
+                  ? <img src={avatarUrl} alt={nomeHost} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                  : <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E1F5EE', color: '#085041', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                      {initials(nomeHost)}
+                    </div>
+                }
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: '#111', marginBottom: 2, lineHeight: 1.2 }}>{r.titulo}</div>
+                  <div style={{ fontSize: 12, color: '#aaa', fontWeight: 500 }}>
+                    {isCriador ? '⭐ criado por você' : `por ${nomeHost}`}
+                  </div>
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', flexShrink: 0 }}>

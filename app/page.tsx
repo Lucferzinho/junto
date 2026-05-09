@@ -21,7 +21,7 @@ export default function Home() {
     setLoading(true)
     const { data, error } = await supabase
       .from('treinos')
-      .select('*, inscricoes(id)')
+      .select('*, inscricoes(id), usuarios(nome, avatar_url)')
       .eq('status', 'ativo')
       .order('data', { ascending: true })
     if (!error && data) setTreinos(data)
@@ -44,7 +44,6 @@ export default function Home() {
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#fff' }}>
-      {/* Header */}
       <div style={{ padding: '14px 16px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 28, height: 28, background: '#1D9E75', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -54,7 +53,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Nav */}
       <div style={{ display: 'flex', borderBottom: '1px solid #eee', position: 'sticky', top: 57, background: '#fff', zIndex: 9 }}>
         {[
           { id: 'feed', label: 'Treinos', emoji: '📋' },
@@ -72,7 +70,6 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Conteúdo */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {tab === 'feed' && (
           <Feed treinos={treinos} loading={loading} onAbrirChat={abrirChat} onAtualizar={carregarTreinos} />
