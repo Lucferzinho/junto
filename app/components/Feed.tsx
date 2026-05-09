@@ -25,7 +25,7 @@ type Props = {
 
 export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Props) {
   const [userId, setUserId] = useState<string | null>(null)
-  const [inscricoes, setInscricoes] = useState<Record<string, string>>({}) // treino_id -> inscricao_id
+  const [inscricoes, setInscricoes] = useState<Record<string, string>>({})
   const [carregando, setCarregando] = useState<string | null>(null)
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
       })
     })
 
-    onAtualizar()
+    await onAtualizar()
     setCarregando(null)
   }
 
@@ -77,18 +77,18 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     setCarregando(treino.id)
     const inscricaoId = inscricoes[treino.id]
     const { error } = await supabase.from('inscricoes').delete().eq('id', inscricaoId)
-    if (error) alert('Erro ao sair: ' + error.message)
-    onAtualizar()
+    if (error) { alert('Erro ao sair: ' + error.message); setCarregando(null); return }
+    await onAtualizar()
     setCarregando(null)
   }
 
   async function cancelarTreino(e: React.MouseEvent, treino: Treino) {
     e.stopPropagation()
-    if (!confirm('Tem certeza que quer cancelar este treino? Todos os inscritos serão avisados.')) return
+    if (!confirm('Tem certeza que quer cancelar este treino? Ele sumirá do feed para todos.')) return
     setCarregando(treino.id)
     const { error } = await supabase.from('treinos').update({ status: 'cancelado' }).eq('id', treino.id)
-    if (error) alert('Erro ao cancelar: ' + error.message)
-    onAtualizar()
+    if (error) { alert('Erro ao cancelar: ' + error.message); setCarregando(null); return }
+    await onAtualizar()
     setCarregando(null)
   }
 
@@ -124,12 +124,11 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
         return (
           <div key={r.id} onClick={() => onAbrirChat(r)} style={{ padding: 16, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
 
-            {/* Topo */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
               <div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: '#111', marginBottom: 2, lineHeight: 1.2 }}>{r.titulo}</div>
                 <div style={{ fontSize: 12, color: '#aaa', fontWeight: 500 }}>
-                  {isCriador ? '⭐ criado por você' : `por ${r.criador_id?.slice(0,8)}...`}
+                  {isCriador ? '⭐ criado por você' : `por corredor`}
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', flexShrink: 0 }}>
@@ -147,7 +146,6 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               </div>
             </div>
 
-            {/* Meta */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               {[
                 { e: '📅', t: `${fmtData(r.data)} · ${r.horario?.slice(0,5)}` },
@@ -161,7 +159,6 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               ))}
             </div>
 
-            {/* Bottom */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ display: 'flex', marginLeft: 6 }}>
@@ -180,28 +177,21 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               </div>
 
               <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-                {/* Cancelar treino — só criador */}
                 {isCriador && (
                   <button onClick={e => cancelarTreino(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #ffcccc', color: '#cc3333', background: '#fff8f8', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
-                    Cancelar treino
+                    {carregando === r.id ? '...' : 'Cancelar treino'}
                   </button>
                 )}
-
-                {/* Sair do treino — quem está inscrito */}
                 {isInscrito && (
                   <button onClick={e => sairDoTreino(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
-                    Sair
+                    {carregando === r.id ? '...' : 'Sair'}
                   </button>
                 )}
-
-                {/* Participar — quem não está inscrito e tem vaga */}
                 {!isInscrito && !full && (
                   <button onClick={e => participar(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 14px', border: '1px solid #1D9E75', color: '#1D9E75', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontFamily: "'Barlow', sans-serif" }}>
                     {carregando === r.id ? 'Aguarde...' : 'Participar'}
                   </button>
                 )}
-
-                {/* Lista cheia */}
                 {!isInscrito && full && (
                   <button disabled style={{ fontSize: 12, padding: '5px 14px', border: '1px solid #ddd', color: '#ccc', background: 'none', borderRadius: 8, cursor: 'default', fontFamily: "'Barlow', sans-serif" }}>
                     Lista cheia
