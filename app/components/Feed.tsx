@@ -30,6 +30,9 @@ const TOM_STYLE: Record<string, { bg: string; color: string }> = {
   'Qualquer nível': { bg: '#EAF3DE', color: '#27500A' },
 }
 
+const TIPOS = ['Long run','Intervalado','Progressivo','Tempo run','Regenerativo','Corrida livre']
+const TOMS = ['Leve e papo','Focado','Qualquer nível']
+
 type Props = {
   treinos: Treino[]
   loading: boolean
@@ -42,6 +45,12 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
   const [inscricoes, setInscricoes] = useState<Record<string, string>>({})
   const [listaEspera, setListaEspera] = useState<Record<string, string>>({})
   const [carregando, setCarregando] = useState<string | null>(null)
+
+  // Filtros
+  const [filtroTipo, setFiltroTipo] = useState('')
+  const [filtroTom, setFiltroTom] = useState('')
+  const [filtroIniciantes, setFiltroIniciantes] = useState(false)
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -100,14 +109,11 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     const { error } = await supabase.from('inscricoes').delete().eq('id', inscricoes[treino.id])
     if (error) { alert('Erro ao sair: ' + error.message); setCarregando(null); return }
     setInscricoes(prev => { const n = { ...prev }; delete n[treino.id]; return n })
-
-    // Avisa quem está na lista de espera
     await fetch('/api/vaga-aberta', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ treino_id: treino.id, titulo: treino.titulo, data: fmtData(treino.data), horario: treino.horario?.slice(0,5), local: treino.local })
     })
-
     await onAtualizar()
     setCarregando(null)
   }
@@ -141,6 +147,16 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     setCarregando(null)
   }
 
+  // Aplica filtros
+  const treinosFiltrados = treinos.filter(r => {
+    if (filtroTipo && r.tipo !== filtroTipo) return false
+    if (filtroTom && r.tom !== filtroTom) return false
+    if (filtroIniciantes && !r.aberto_iniciantes) return false
+    return true
+  })
+
+  const temFiltroAtivo = filtroTipo || filtroTom || filtroIniciantes
+
   if (loading) return (
     <div style={{ padding: 40, textAlign: 'center', color: '#aaa', fontFamily: "'Barlow', sans-serif" }}>
       <div style={{ fontSize: 32, marginBottom: 8 }}>🏃</div>
@@ -148,22 +164,78 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     </div>
   )
 
-  if (!treinos.length) return (
-    <div style={{ padding: 40, textAlign: 'center', color: '#aaa', fontFamily: "'Barlow', sans-serif" }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>👟</div>
-      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Nenhum treino por aqui ainda.</div>
-      <div style={{ fontSize: 13 }}>Crie o primeiro e convide seus amigos!</div>
-    </div>
-  )
-
   return (
     <div style={{ fontFamily: "'Barlow', sans-serif" }}>
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: '#111', margin: 0 }}>Perto de você</h2>
-        <span style={{ fontSize: 12, color: '#aaa', fontWeight: 500 }}>{treinos.length} treino{treinos.length !== 1 ? 's' : ''}</span>
+      {/* Header + filtros */}
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid #eee' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: mostrarFiltros ? 12 : 0 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: '#111', margin: 0 }}>Perto de você</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: '#aaa', fontWeight: 500 }}>{treinosFiltrados.length} treino{treinosFiltrados.length !== 1 ? 's' : ''}</span>
+            <button onClick={() => setMostrarFiltros(!mostrarFiltros)} style={{ fontSize: 12, padding: '4px 12px', border: `1px solid ${temFiltroAtivo ? '#1D9E75' : '#ddd'}`, color: temFiltroAtivo ? '#1D9E75' : '#888', background: temFiltroAtivo ? '#E1F5EE' : '#fff', borderRadius: 20, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
+              {temFiltroAtivo ? '🔍 Filtros ativos' : '🔍 Filtrar'}
+            </button>
+          </div>
+        </div>
+
+        {/* Painel de filtros */}
+        {mostrarFiltros && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+            {/* Tipo */}
+            <div>
+              <div style={{ fontSize: 11, color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Tipo de treino</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {TIPOS.map(t => (
+                  <button key={t} onClick={() => setFiltroTipo(filtroTipo === t ? '' : t)} style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, border: `1px solid ${filtroTipo === t ? '#1D9E75' : '#ddd'}`, background: filtroTipo === t ? '#E1F5EE' : '#fff', color: filtroTipo === t ? '#085041' : '#666', cursor: 'pointer', fontWeight: filtroTipo === t ? 700 : 500, fontFamily: "'Barlow', sans-serif" }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tom */}
+            <div>
+              <div style={{ fontSize: 11, color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Tom do treino</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {TOMS.map(t => {
+                  const s = TOM_STYLE[t]
+                  const sel = filtroTom === t
+                  return (
+                    <button key={t} onClick={() => setFiltroTom(filtroTom === t ? '' : t)} style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, border: `1px solid ${sel ? s.color : '#ddd'}`, background: sel ? s.bg : '#fff', color: sel ? s.color : '#666', cursor: 'pointer', fontWeight: sel ? 700 : 500, fontFamily: "'Barlow', sans-serif" }}>
+                      {t}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Iniciantes */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Só abertos a iniciantes</span>
+              <div onClick={() => setFiltroIniciantes(!filtroIniciantes)} style={{ width: 36, height: 20, background: filtroIniciantes ? '#1D9E75' : '#ddd', borderRadius: 20, position: 'relative', cursor: 'pointer', transition: 'background .2s' }}>
+                <div style={{ position: 'absolute', width: 14, height: 14, background: '#fff', borderRadius: '50%', top: 3, left: filtroIniciantes ? 19 : 3, transition: 'left .2s' }} />
+              </div>
+            </div>
+
+            {/* Limpar filtros */}
+            {temFiltroAtivo && (
+              <button onClick={() => { setFiltroTipo(''); setFiltroTom(''); setFiltroIniciantes(false) }} style={{ fontSize: 12, color: '#cc3333', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, textAlign: 'left', padding: 0, fontFamily: "'Barlow', sans-serif" }}>
+                ✕ Limpar filtros
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {treinos.map((r) => {
+      {treinosFiltrados.length === 0 && (
+        <div style={{ padding: 40, textAlign: 'center', color: '#aaa' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Nenhum treino com esses filtros.</div>
+          <div style={{ fontSize: 13 }}>Tenta ajustar os filtros ou cria um treino!</div>
+        </div>
+      )}
+
+      {treinosFiltrados.map((r) => {
         const inscritos = r.inscricoes?.length ?? 0
         const full = inscritos >= r.max_pessoas
         const tom = TOM_STYLE[r.tom] ?? TOM_STYLE['Qualquer nível']
@@ -178,7 +250,6 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
 
         return (
           <div key={r.id} onClick={() => onAbrirChat(r)} style={{ padding: 16, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
-
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {avatarUrl
@@ -240,26 +311,19 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               </div>
 
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
-                {/* Criador pode cancelar */}
                 {isCriador && (
                   <button onClick={e => cancelarTreino(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #ffcccc', color: '#cc3333', background: '#fff8f8', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
                     {carregando === r.id ? '...' : 'Cancelar treino'}
                   </button>
                 )}
-
-                {/* Inscrito pode sair */}
                 {isInscrito && (
                   <button onClick={e => sairDoTreino(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
                     {carregando === r.id ? '...' : 'Sair'}
                   </button>
                 )}
-
-                {/* Inscrições encerradas */}
                 {!isInscrito && encerrado && (
                   <span style={{ fontSize: 12, color: '#1D9E75', fontWeight: 700 }}>Inscrições encerradas. Bom treino! 🏃</span>
                 )}
-
-                {/* Lotado — lista de espera */}
                 {!isInscrito && full && !encerrado && (
                   naEspera
                     ? <button onClick={e => sairListaEspera(e, r)} disabled={carregando === r.id + '-espera'} style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
@@ -269,8 +333,6 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
                         🔔 Avisar se abrir vaga
                       </button>
                 )}
-
-                {/* Participar */}
                 {!isInscrito && !full && !encerrado && (
                   <button onClick={e => participar(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 14px', border: '1px solid #1D9E75', color: '#1D9E75', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontFamily: "'Barlow', sans-serif" }}>
                     {carregando === r.id ? 'Aguarde...' : 'Participar'}
