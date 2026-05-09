@@ -19,6 +19,8 @@ export default function Perfil() {
   const [pace, setPace] = useState('')
   const [nivel, setNivel] = useState('iniciante')
   const [salvando, setSalvando] = useState(false)
+  const [totalFeitos, setTotalFeitos] = useState(0)
+  const [totalInscritos, setTotalInscritos] = useState(0)
 
   useEffect(() => {
     carregarPerfil()
@@ -34,6 +36,7 @@ export default function Perfil() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
     setEmail(user.email ?? '')
+
     const { data } = await supabase.from('usuarios').select('*').eq('id', user.id).single()
     if (data) {
       setUsuario(data)
@@ -42,12 +45,18 @@ export default function Perfil() {
       setPace(data.pace_medio ?? '')
       setNivel(data.nivel ?? 'iniciante')
     }
+
+    const { count: cks } = await supabase.from('checkins').select('id', { count: 'exact' }).eq('usuario_id', user.id)
+    setTotalFeitos(cks ?? 0)
+
+    const { count: ins } = await supabase.from('inscricoes').select('id', { count: 'exact' }).eq('usuario_id', user.id)
+    setTotalInscritos(ins ?? 0)
+
     setLoading(false)
   }
 
   async function entrar() {
-    setEnviando(true)
-    setMsg('')
+    setEnviando(true); setMsg('')
     const { error } = await supabase.auth.signInWithPassword({ email: formEmail, password: formSenha })
     if (error) setMsg('Email ou senha incorretos.')
     setEnviando(false)
@@ -55,8 +64,7 @@ export default function Perfil() {
 
   async function cadastrar() {
     if (!formNome) { setMsg('Digite seu nome.'); return }
-    setEnviando(true)
-    setMsg('')
+    setEnviando(true); setMsg('')
     const { data, error } = await supabase.auth.signUp({ email: formEmail, password: formSenha })
     if (error) { setMsg('Erro: ' + error.message); setEnviando(false); return }
     if (data.user) {
@@ -68,8 +76,7 @@ export default function Perfil() {
 
   async function logout() {
     await supabase.auth.signOut()
-    setUsuario(null)
-    setEmail('')
+    setUsuario(null); setEmail('')
   }
 
   async function salvarPerfil() {
@@ -82,39 +89,37 @@ export default function Perfil() {
     setSalvando(false)
   }
 
-  const inp = { width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, outline: 'none', marginBottom: 10 } as React.CSSProperties
+  const inp = { width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, outline: 'none', marginBottom: 10, fontFamily: "'Barlow', sans-serif" } as React.CSSProperties
 
   if (loading) return (
-    <div style={{ padding: 40, textAlign: 'center', color: '#aaa' }}>
+    <div style={{ padding: 40, textAlign: 'center', color: '#aaa', fontFamily: "'Barlow', sans-serif" }}>
       <div style={{ fontSize: 32, marginBottom: 8 }}>👤</div>Carregando...
     </div>
   )
 
   if (!email) return (
-    <div style={{ padding: 24, maxWidth: 360, margin: '0 auto' }}>
+    <div style={{ padding: 24, maxWidth: 360, margin: '0 auto', fontFamily: "'Barlow', sans-serif" }}>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
         <div style={{ fontSize: 40, marginBottom: 8 }}>🏃</div>
-        <div style={{ fontSize: 18, fontWeight: 600, color: '#111', marginBottom: 4 }}>Boas-vindas ao Juntô!</div>
-        <div style={{ fontSize: 13, color: '#888' }}>Corre junto é muito melhor.</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: '#111', marginBottom: 4 }}>Boas-vindas ao Junto!</div>
+        <div style={{ fontSize: 13, color: '#888' }}>Corra junto. É muito melhor.</div>
       </div>
 
       <div style={{ display: 'flex', borderBottom: '1px solid #eee', marginBottom: 20 }}>
         {(['login', 'cadastro'] as const).map(m => (
-          <button key={m} onClick={() => { setModo(m); setMsg('') }} style={{ flex: 1, padding: '8px 0', fontSize: 14, fontWeight: modo === m ? 600 : 400, color: modo === m ? '#1D9E75' : '#888', background: 'none', border: 'none', borderBottom: `2px solid ${modo === m ? '#1D9E75' : 'transparent'}`, cursor: 'pointer' }}>
+          <button key={m} onClick={() => { setModo(m); setMsg('') }} style={{ flex: 1, padding: '8px 0', fontSize: 14, fontWeight: modo === m ? 700 : 500, color: modo === m ? '#1D9E75' : '#888', background: 'none', border: 'none', borderBottom: `2px solid ${modo === m ? '#1D9E75' : 'transparent'}`, cursor: 'pointer', fontFamily: "'Barlow', sans-serif" }}>
             {m === 'login' ? 'Entrar' : 'Criar conta'}
           </button>
         ))}
       </div>
 
-      {modo === 'cadastro' && (
-        <input style={inp} placeholder="Seu nome" value={formNome} onChange={e => setFormNome(e.target.value)} />
-      )}
+      {modo === 'cadastro' && <input style={inp} placeholder="Seu nome" value={formNome} onChange={e => setFormNome(e.target.value)} />}
       <input style={inp} type="email" placeholder="Email" value={formEmail} onChange={e => setFormEmail(e.target.value)} />
       <input style={inp} type="password" placeholder="Senha (mín. 6 caracteres)" value={formSenha} onChange={e => setFormSenha(e.target.value)} onKeyDown={e => e.key === 'Enter' && (modo === 'login' ? entrar() : cadastrar())} />
 
-      {msg && <div style={{ fontSize: 13, color: msg.includes('criada') ? '#1D9E75' : '#c00', marginBottom: 12 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 13, color: msg.includes('criada') ? '#1D9E75' : '#c00', marginBottom: 12, fontWeight: 600 }}>{msg}</div>}
 
-      <button onClick={modo === 'login' ? entrar : cadastrar} disabled={enviando} style={{ width: '100%', background: '#1D9E75', color: '#fff', border: 'none', borderRadius: 8, padding: 12, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+      <button onClick={modo === 'login' ? entrar : cadastrar} disabled={enviando} style={{ width: '100%', background: '#1D9E75', color: '#fff', border: 'none', borderRadius: 8, padding: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'Barlow', sans-serif" }}>
         {enviando ? 'Aguarde...' : modo === 'login' ? 'Entrar' : 'Criar conta'}
       </button>
     </div>
@@ -123,14 +128,14 @@ export default function Perfil() {
   const inits = (usuario?.nome || email).slice(0, 2).toUpperCase()
 
   return (
-    <div>
+    <div style={{ fontFamily: "'Barlow', sans-serif" }}>
       <div style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #eee' }}>
-        <div style={{ width: 68, height: 68, borderRadius: '50%', background: '#E1F5EE', color: '#085041', fontSize: 24, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+        <div style={{ width: 68, height: 68, borderRadius: '50%', background: '#E1F5EE', color: '#085041', fontSize: 24, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
           {inits}
         </div>
-        <div style={{ fontSize: 18, fontWeight: 600, color: '#111', marginBottom: 4 }}>{usuario?.nome || 'Sem nome ainda'}</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: '#111', marginBottom: 4 }}>{usuario?.nome || 'Sem nome ainda'}</div>
         <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>{email}</div>
-        <button onClick={() => setEditando(!editando)} style={{ fontSize: 13, padding: '6px 18px', border: '1px solid #1D9E75', color: '#1D9E75', background: 'none', borderRadius: 8, cursor: 'pointer' }}>
+        <button onClick={() => setEditando(!editando)} style={{ fontSize: 13, padding: '6px 18px', border: '1px solid #1D9E75', color: '#1D9E75', background: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
           {editando ? 'Cancelar' : '✏️ Editar perfil'}
         </button>
       </div>
@@ -143,43 +148,45 @@ export default function Perfil() {
             { label: 'Pace médio', value: pace, set: setPace, placeholder: 'Ex: 5:30' },
           ].map(f => (
             <div key={f.label}>
-              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>{f.label}</label>
-              <input value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.placeholder} style={{ width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, outline: 'none' }} />
+              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4, fontWeight: 600 }}>{f.label}</label>
+              <input value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.placeholder} style={{ width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, outline: 'none', fontFamily: "'Barlow', sans-serif" }} />
             </div>
           ))}
           <div>
-            <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Nível</label>
-            <select value={nivel} onChange={e => setNivel(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, outline: 'none' }}>
+            <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4, fontWeight: 600 }}>Nível</label>
+            <select value={nivel} onChange={e => setNivel(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, outline: 'none', fontFamily: "'Barlow', sans-serif" }}>
               <option value="iniciante">Iniciante</option>
               <option value="intermediário">Intermediário</option>
               <option value="avançado">Avançado</option>
             </select>
           </div>
-          <button onClick={salvarPerfil} disabled={salvando} style={{ background: '#1D9E75', color: '#fff', border: 'none', borderRadius: 8, padding: 11, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={salvarPerfil} disabled={salvando} style={{ background: '#1D9E75', color: '#fff', border: 'none', borderRadius: 8, padding: 11, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'Barlow', sans-serif" }}>
             {salvando ? 'Salvando...' : '💾 Salvar'}
           </button>
         </div>
       )}
 
-      {usuario && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #eee' }}>
-          {[{ n: usuario.pace_medio || '–', l: 'Pace médio' }, { n: usuario.nivel || '–', l: 'Nível' }].map(s => (
-            <div key={s.l} style={{ padding: 16, textAlign: 'center', borderRight: '1px solid #eee' }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: '#1D9E75' }}>{s.n}</div>
-              <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>{s.l}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #eee' }}>
+        {[
+          { n: totalFeitos, l: 'Treinos feitos' },
+          { n: totalInscritos, l: 'Inscrições' },
+          { n: usuario?.pace_medio || '–', l: 'Pace médio' },
+        ].map(s => (
+          <div key={s.l} style={{ padding: 16, textAlign: 'center', borderRight: '1px solid #eee' }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#1D9E75' }}>{s.n}</div>
+            <div style={{ fontSize: 11, color: '#aaa', marginTop: 2, fontWeight: 600 }}>{s.l}</div>
+          </div>
+        ))}
+      </div>
 
       {usuario?.cidade && (
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>📍</span><span style={{ fontSize: 14, color: '#444' }}>{usuario.cidade}</span>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>📍</span><span style={{ fontSize: 14, color: '#444', fontWeight: 500 }}>{usuario.cidade}</span>
         </div>
       )}
 
       <div style={{ padding: 16 }}>
-        <button onClick={logout} style={{ width: '100%', padding: 11, border: '1px solid #eee', borderRadius: 8, fontSize: 14, color: '#888', background: 'none', cursor: 'pointer' }}>
+        <button onClick={logout} style={{ width: '100%', padding: 11, border: '1px solid #eee', borderRadius: 8, fontSize: 14, color: '#888', background: 'none', cursor: 'pointer', fontFamily: "'Barlow', sans-serif", fontWeight: 600 }}>
           Sair da conta
         </button>
       </div>

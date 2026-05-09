@@ -17,6 +17,14 @@ function initials(nome: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+function inscricoesEncerradas(data: string, horario: string) {
+  if (!data || !horario) return false
+  const treino = new Date(`${data}T${horario}`)
+  const agora = new Date()
+  const diff = treino.getTime() - agora.getTime()
+  return diff < 15 * 60 * 1000 // menos de 15 minutos
+}
+
 const TOM_STYLE: Record<string, { bg: string; color: string }> = {
   'Leve e papo':    { bg: '#E6F1FB', color: '#0C447C' },
   'Focado':         { bg: '#FBEAF0', color: '#72243E' },
@@ -59,10 +67,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     setCarregando(treino.id)
     const { error, data: nova } = await supabase.from('inscricoes').insert({ treino_id: treino.id, usuario_id: userId }).select('id').single()
     if (error) { alert('Erro ao se inscrever: ' + error.message); setCarregando(null); return }
-
-    // Atualiza inscrições localmente
     if (nova) setInscricoes(prev => ({ ...prev, [treino.id]: nova.id }))
-
     const { data: usuario } = await supabase.from('usuarios').select('nome').eq('id', userId).single()
     const { data: { user } } = await supabase.auth.getUser()
     await fetch('/api/email', {
@@ -85,14 +90,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
     const inscricaoId = inscricoes[treino.id]
     const { error } = await supabase.from('inscricoes').delete().eq('id', inscricaoId)
     if (error) { alert('Erro ao sair: ' + error.message); setCarregando(null); return }
-
-    // Atualiza inscrições localmente
-    setInscricoes(prev => {
-      const novo = { ...prev }
-      delete novo[treino.id]
-      return novo
-    })
-
+    setInscricoes(prev => { const n = { ...prev }; delete n[treino.id]; return n })
     await onAtualizar()
     setCarregando(null)
   }
@@ -137,10 +135,9 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
         const isInscrito = !!inscricoes[r.id]
         const nomeHost = (r as any).usuarios?.nome || 'Corredor'
         const avatarUrl = (r as any).usuarios?.avatar_url
-
-        // Verifica se o treino é hoje
         const hoje = new Date().toISOString().split('T')[0]
         const isHoje = r.data === hoje
+        const encerrado = inscricoesEncerradas(r.data, r.horario)
 
         return (
           <div key={r.id} onClick={() => onAbrirChat(r)} style={{ padding: 16, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
@@ -162,9 +159,12 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', flexShrink: 0 }}>
                 {isHoje && <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#FFF3E0', color: '#E65100', fontWeight: 700 }}>🔥 Hoje!</span>}
-                <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: full ? '#FAEEDA' : '#E1F5EE', color: full ? '#633806' : '#085041', fontWeight: 700 }}>
-                  {full ? 'Lotado' : 'Vagas abertas'}
-                </span>
+                {encerrado
+                  ? <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#f0f0f0', color: '#888', fontWeight: 700 }}>Inscrições encerradas</span>
+                  : <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: full ? '#FAEEDA' : '#E1F5EE', color: full ? '#633806' : '#085041', fontWeight: 700 }}>
+                      {full ? 'Lotado' : 'Vagas abertas'}
+                    </span>
+                }
                 <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: tom.bg, color: tom.color, fontWeight: 600 }}>
                   {r.tom}
                 </span>
@@ -217,14 +217,14 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
                     {carregando === r.id ? '...' : 'Sair'}
                   </button>
                 )}
-                {!isInscrito && !full && (
+                {!isInscrito && !full && !encerrado && (
                   <button onClick={e => participar(e, r)} disabled={carregando === r.id} style={{ fontSize: 12, padding: '5px 14px', border: '1px solid #1D9E75', color: '#1D9E75', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontFamily: "'Barlow', sans-serif" }}>
                     {carregando === r.id ? 'Aguarde...' : 'Participar'}
                   </button>
                 )}
-                {!isInscrito && full && (
+                {!isInscrito && (full || encerrado) && (
                   <button disabled style={{ fontSize: 12, padding: '5px 14px', border: '1px solid #ddd', color: '#ccc', background: 'none', borderRadius: 8, cursor: 'default', fontFamily: "'Barlow', sans-serif" }}>
-                    Lista cheia
+                    {full ? 'Lista cheia' : 'Encerrado'}
                   </button>
                 )}
               </div>
