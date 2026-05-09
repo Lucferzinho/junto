@@ -22,7 +22,12 @@ export default function Chat({ treino, onVoltar }: Props) {
   const [isCriador, setIsCriador] = useState(false)
   const [saindo, setSaindo] = useState(false)
   const [cancelando, setCancelando] = useState(false)
+  const [checkinFeito, setCheckinFeito] = useState(false)
+  const [fazendoCheckin, setFazendoCheckin] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  const hoje = new Date().toISOString().split('T')[0]
+  const isHoje = treino.data === hoje
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -30,6 +35,7 @@ export default function Chat({ treino, onVoltar }: Props) {
         setUserId(data.user.id)
         setIsCriador(data.user.id === treino.criador_id)
         verificarInscricao(data.user.id)
+        verificarCheckin(data.user.id)
       }
     })
     carregarMensagens()
@@ -51,6 +57,11 @@ export default function Chat({ treino, onVoltar }: Props) {
   async function verificarInscricao(uid: string) {
     const { data } = await supabase.from('inscricoes').select('id').eq('treino_id', treino.id).eq('usuario_id', uid).single()
     if (data) { setIsInscrito(true); setInscricaoId(data.id) }
+  }
+
+  async function verificarCheckin(uid: string) {
+    const { data } = await supabase.from('checkins').select('id').eq('treino_id', treino.id).eq('usuario_id', uid).single()
+    if (data) setCheckinFeito(true)
   }
 
   async function carregarMensagens() {
@@ -87,6 +98,15 @@ export default function Chat({ treino, onVoltar }: Props) {
     onVoltar()
   }
 
+  async function confirmarPresenca() {
+    if (!userId) return
+    setFazendoCheckin(true)
+    const { error } = await supabase.from('checkins').insert({ treino_id: treino.id, usuario_id: userId })
+    if (error) { alert('Erro ao confirmar: ' + error.message); setFazendoCheckin(false); return }
+    setCheckinFeito(true)
+    setFazendoCheckin(false)
+  }
+
   const inscritos = treino.inscricoes?.length ?? 0
 
   return (
@@ -99,8 +119,6 @@ export default function Chat({ treino, onVoltar }: Props) {
           <div style={{ fontSize: 16, fontWeight: 800, color: '#111' }}>{treino.titulo}</div>
           <div style={{ fontSize: 11, color: '#aaa', fontWeight: 500 }}>{inscritos} participante{inscritos !== 1 ? 's' : ''} · {treino.local}</div>
         </div>
-
-        {/* Ações */}
         <div style={{ display: 'flex', gap: 6 }}>
           {isInscrito && (
             <button onClick={sairDoTreino} disabled={saindo} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
@@ -129,6 +147,25 @@ export default function Chat({ treino, onVoltar }: Props) {
           </div>
         ))}
       </div>
+
+      {/* Banner de check-in — só aparece se o treino for hoje e a pessoa estiver inscrita */}
+      {isHoje && isInscrito && (
+        <div style={{ padding: '12px 16px', background: checkinFeito ? '#E1F5EE' : '#FFF3E0', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: checkinFeito ? '#085041' : '#E65100' }}>
+              {checkinFeito ? '✅ Presença confirmada!' : '🔥 O treino é hoje!'}
+            </div>
+            <div style={{ fontSize: 12, color: checkinFeito ? '#1D9E75' : '#888', marginTop: 2 }}>
+              {checkinFeito ? 'Vai aparecer no seu histórico.' : 'Confirme que você foi correr!'}
+            </div>
+          </div>
+          {!checkinFeito && (
+            <button onClick={confirmarPresenca} disabled={fazendoCheckin} style={{ fontSize: 13, padding: '7px 16px', background: '#1D9E75', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, flexShrink: 0, fontFamily: "'Barlow', sans-serif" }}>
+              {fazendoCheckin ? '...' : 'Fui correr! ✅'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Mensagens */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 300 }}>
