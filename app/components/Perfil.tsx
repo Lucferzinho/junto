@@ -56,13 +56,18 @@ export default function Perfil() {
   async function uploadAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (ext === 'heic' || ext === 'heif') {
+      alert('Formato HEIC não é suportado. Por favor escolha uma foto JPG ou PNG.')
+      return
+    }
+
     setUploadando(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const ext = file.name.split('.').pop()
     const path = `${user.id}/avatar.${ext}`
-
     const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
     if (upErr) { alert('Erro ao fazer upload: ' + upErr.message); setUploadando(false); return }
 
@@ -144,9 +149,7 @@ export default function Perfil() {
 
   return (
     <div style={{ fontFamily: "'Barlow', sans-serif" }}>
-      {/* Topo */}
       <div style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #eee' }}>
-        {/* Avatar clicável */}
         <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto 10px', cursor: 'pointer' }} onClick={() => fileRef.current?.click()}>
           {usuario?.avatar_url
             ? <img src={usuario.avatar_url} alt="avatar" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #E1F5EE' }} />
@@ -158,7 +161,8 @@ export default function Perfil() {
             {uploadando ? '⏳' : '📷'}
           </div>
         </div>
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={uploadAvatar} />
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }} onChange={uploadAvatar} />
+        <div style={{ fontSize: 11, color: '#aaa', marginBottom: 8 }}>Use JPG ou PNG</div>
 
         <div style={{ fontSize: 20, fontWeight: 800, color: '#111', marginBottom: 4 }}>{usuario?.nome || 'Sem nome ainda'}</div>
         <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>{email}</div>
