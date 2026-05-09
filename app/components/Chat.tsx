@@ -24,6 +24,7 @@ export default function Chat({ treino, onVoltar }: Props) {
   const [cancelando, setCancelando] = useState(false)
   const [checkinFeito, setCheckinFeito] = useState(false)
   const [fazendoCheckin, setFazendoCheckin] = useState(false)
+  const [copiado, setCopiado] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const hoje = new Date().toISOString().split('T')[0]
@@ -91,7 +92,7 @@ export default function Chat({ treino, onVoltar }: Props) {
   }
 
   async function cancelarTreino() {
-    if (!confirm('Tem certeza que quer cancelar este treino? Ele sumirá do feed para todos.')) return
+    if (!confirm('Tem certeza que quer cancelar este treino?')) return
     setCancelando(true)
     const { error } = await supabase.from('treinos').update({ status: 'cancelado' }).eq('id', treino.id)
     if (error) { alert('Erro ao cancelar: ' + error.message); setCancelando(false); return }
@@ -107,6 +108,17 @@ export default function Chat({ treino, onVoltar }: Props) {
     setFazendoCheckin(false)
   }
 
+  function compartilhar() {
+    const texto = `🏃 ${treino.titulo}\n📅 ${fmtData(treino.data)} às ${treino.horario?.slice(0,5)}\n📍 ${treino.local}\n🛣️ ${treino.km} km · ${treino.pace} /km\n\nVem correr junto! 👉 juntoapp.com.br`
+    if (navigator.share) {
+      navigator.share({ title: treino.titulo, text: texto, url: 'https://juntoapp.com.br' })
+    } else {
+      navigator.clipboard.writeText(texto)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+    }
+  }
+
   const inscritos = treino.inscricoes?.length ?? 0
 
   return (
@@ -120,6 +132,10 @@ export default function Chat({ treino, onVoltar }: Props) {
           <div style={{ fontSize: 11, color: '#aaa', fontWeight: 500 }}>{inscritos} participante{inscritos !== 1 ? 's' : ''} · {treino.local}</div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {/* Compartilhar */}
+          <button onClick={compartilhar} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #ddd', color: copiado ? '#1D9E75' : '#888', background: copiado ? '#E1F5EE' : '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
+            {copiado ? '✅ Copiado!' : '📤 Compartilhar'}
+          </button>
           {isInscrito && (
             <button onClick={sairDoTreino} disabled={saindo} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
               {saindo ? '...' : 'Sair'}
@@ -127,7 +143,7 @@ export default function Chat({ treino, onVoltar }: Props) {
           )}
           {isCriador && (
             <button onClick={cancelarTreino} disabled={cancelando} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #ffcccc', color: '#cc3333', background: '#fff8f8', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
-              {cancelando ? '...' : 'Cancelar treino'}
+              {cancelando ? '...' : 'Cancelar'}
             </button>
           )}
         </div>
@@ -148,7 +164,7 @@ export default function Chat({ treino, onVoltar }: Props) {
         ))}
       </div>
 
-      {/* Banner de check-in — só aparece se o treino for hoje e a pessoa estiver inscrita */}
+      {/* Banner check-in */}
       {isHoje && isInscrito && (
         <div style={{ padding: '12px 16px', background: checkinFeito ? '#E1F5EE' : '#FFF3E0', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
@@ -156,7 +172,7 @@ export default function Chat({ treino, onVoltar }: Props) {
               {checkinFeito ? '✅ Presença confirmada!' : '🔥 O treino é hoje!'}
             </div>
             <div style={{ fontSize: 12, color: checkinFeito ? '#1D9E75' : '#888', marginTop: 2 }}>
-              {checkinFeito ? 'Vai aparecer no seu histórico.' : 'Confirme que você foi correr!'}
+              {checkinFeito ? 'Arrasou! 💪' : 'Confirme que você foi correr!'}
             </div>
           </div>
           {!checkinFeito && (
