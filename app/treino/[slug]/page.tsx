@@ -1,148 +1,79 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
-import { supabase } from '../../../lib/supabase'
+import { useState, useEffect } from 'react'
+import { supabase, Treino } from '../lib/supabase'
+import Feed from './components/Feed'
+import CriarTreino from './components/CriarTreino'
+import Perfil from './components/Perfil'
+import Chat from './components/Chat'
+import Grupos from './components/Grupos'
 
-const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
-function fmtData(d: string) {
-  if (!d) return ''
-  const [, m, dia] = d.split('-')
-  return `${parseInt(dia)} ${MESES[parseInt(m) - 1]}`
-}
-
-const TOM_STYLE: Record<string, { bg: string; color: string }> = {
-  'Leve e papo':    { bg: '#E6F1FB', color: '#0C447C' },
-  'Focado':         { bg: '#FBEAF0', color: '#72243E' },
-  'Qualquer nível': { bg: '#EAF3DE', color: '#27500A' },
-}
-
-export default function TreinoPublico() {
-  const params = useParams()
-  const slug = params?.slug as string
-  const [treino, setTreino] = useState<any>(null)
+export default function Home() {
+  const [tab, setTab] = useState<'feed' | 'criar' | 'grupos' | 'perfil'>('feed')
+  const [chatTreino, setChatTreino] = useState<Treino | null>(null)
+  const [treinos, setTreinos] = useState<Treino[]>([])
   const [loading, setLoading] = useState(true)
-  const [copiado, setCopiado] = useState(false)
 
   useEffect(() => {
-    if (!slug) return
-    supabase
+    carregarTreinos()
+  }, [])
+
+  async function carregarTreinos() {
+    setLoading(true)
+    const { data, error } = await supabase
       .from('treinos')
       .select('*, inscricoes(id), usuarios(nome, avatar_url)')
-      .eq('slug', slug)
-      .single()
-      .then(({ data }) => {
-        setTreino(data)
-        setLoading(false)
-      })
-  }, [slug])
-
-  function compartilhar() {
-    const url = `https://juntoapp.com.br/treino/${slug}`
-    if (navigator.share) {
-      navigator.share({ title: treino.titulo, url })
-    } else {
-      navigator.clipboard.writeText(url)
-      setCopiado(true)
-      setTimeout(() => setCopiado(false), 2000)
-    }
+      .eq('status', 'ativo')
+      .order('data', { ascending: true })
+    if (!error && data) setTreinos(data)
+    setLoading(false)
+    return true
   }
 
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#aaa' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>🏃</div>
-        Carregando treino...
-      </div>
-    </div>
-  )
+  function abrirChat(treino: Treino) { setChatTreino(treino) }
+  function fecharChat() { setChatTreino(null); carregarTreinos() }
 
-  if (!treino) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Barlow', sans-serif", color: '#aaa' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>😕</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: '#111', marginBottom: 8 }}>Treino não encontrado</div>
-        <a href="https://juntoapp.com.br" style={{ color: '#1D9E75', fontWeight: 600 }}>Ver outros treinos →</a>
-      </div>
-    </div>
-  )
-
-  const inscritos = treino.inscricoes?.length ?? 0
-  const full = inscritos >= treino.max_pessoas
-  const tom = TOM_STYLE[treino.tom] ?? TOM_STYLE['Qualquer nível']
-  const nomeHost = treino.usuarios?.nome || 'Corredor'
-  const avatarUrl = treino.usuarios?.avatar_url
-
-  function initials(nome: string) {
-    const parts = nome.trim().split(' ')
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  if (chatTreino) {
+    return <Chat treino={chatTreino} onVoltar={fecharChat} />
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f5f5', fontFamily: "'Barlow', sans-serif", padding: '0 0 40px' }}>
+    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#fff' }}>
       {/* Header */}
-      <div style={{ background: '#1D9E75', padding: '20px 20px 32px' }}>
-        <a href="https://juntoapp.com.br" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', marginBottom: 20 }}>
-          <div style={{ width: 28, height: 28, background: 'rgba(255,255,255,0.2)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏃</div>
-          <span style={{ color: '#fff', fontSize: 17, fontWeight: 700 }}>Junto</span>
-        </a>
-        <h1 style={{ color: '#fff', fontSize: 26, fontWeight: 800, margin: '0 0 6px', lineHeight: 1.2 }}>{treino.titulo}</h1>
-        <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: 500 }}>por {nomeHost}</div>
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 28, height: 28, background: '#1D9E75', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: '#fff', fontSize: 16 }}>🏃</span>
+          </div>
+          <span style={{ fontSize: 17, fontWeight: 600, color: '#111', fontFamily: "'Barlow', sans-serif" }}>Junto</span>
+        </div>
       </div>
 
-      {/* Card */}
-      <div style={{ maxWidth: 480, margin: '-16px auto 0', padding: '0 16px' }}>
-        <div style={{ background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
-
-          {/* Badges */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: full ? '#FAEEDA' : '#E1F5EE', color: full ? '#633806' : '#085041', fontWeight: 700 }}>
-              {full ? 'Lotado' : `${inscritos}/${treino.max_pessoas} inscritos`}
-            </span>
-            <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: tom.bg, color: tom.color, fontWeight: 600 }}>{treino.tom}</span>
-            {treino.aberto_iniciantes && <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: '#EAF3DE', color: '#27500A', fontWeight: 600 }}>Iniciantes bem-vindos</span>}
-          </div>
-
-          {/* Infos */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-            {[
-              { e: '📅', l: 'Data', v: `${fmtData(treino.data)} às ${treino.horario?.slice(0,5)}` },
-              { e: '📍', l: 'Local', v: treino.local },
-              { e: '🛣️', l: 'Distância', v: `${treino.km} km` },
-              { e: '⚡', l: 'Pace', v: `${treino.pace} /km` },
-              { e: '🏃', l: 'Tipo', v: treino.tipo },
-            ].map(i => (
-              <div key={i.l} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 18, flexShrink: 0 }}>{i.e}</span>
-                <div>
-                  <div style={{ fontSize: 11, color: '#aaa', fontWeight: 600, textTransform: 'uppercase', letterSpacing: .3 }}>{i.l}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>{i.v}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {treino.descricao && (
-            <div style={{ padding: '12px', background: '#f9f9f9', borderRadius: 8, fontSize: 13, color: '#444', lineHeight: 1.6, marginBottom: 16 }}>
-              {treino.descricao}
-            </div>
-          )}
-
-          {/* CTA */}
-          <a href="https://juntoapp.com.br" style={{ display: 'block', background: '#1D9E75', color: '#fff', textDecoration: 'none', borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 700, textAlign: 'center', marginBottom: 10 }}>
-            {full ? 'Ver lista de espera no app' : 'Participar pelo app →'}
-          </a>
-
-          <button onClick={compartilhar} style={{ width: '100%', padding: '11px', border: '1px solid #ddd', borderRadius: 10, fontSize: 14, color: copiado ? '#1D9E75' : '#666', background: copiado ? '#E1F5EE' : '#fff', cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
-            {copiado ? '✅ Link copiado!' : '📤 Compartilhar este treino'}
+      {/* Nav */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #eee', position: 'sticky', top: 57, background: '#fff', zIndex: 9 }}>
+        {[
+          { id: 'feed', label: 'Treinos', emoji: '📋' },
+          { id: 'criar', label: 'Criar', emoji: '➕' },
+          { id: 'grupos', label: 'Grupos', emoji: '👥' },
+          { id: 'perfil', label: 'Perfil', emoji: '👤' },
+        ].map((n) => (
+          <button
+            key={n.id}
+            onClick={() => setTab(n.id as any)}
+            style={{ flex: 1, padding: '10px 4px', fontSize: 11, color: tab === n.id ? '#1D9E75' : '#888', background: 'none', border: 'none', borderBottom: `2px solid ${tab === n.id ? '#1D9E75' : 'transparent'}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontFamily: "'Barlow', sans-serif" }}
+          >
+            <span style={{ fontSize: 18 }}>{n.emoji}</span>
+            {n.label}
           </button>
-        </div>
+        ))}
+      </div>
 
-        <div style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: '#aaa' }}>
-          Corra junto. É muito melhor. 🏃<br />
-          <a href="https://juntoapp.com.br" style={{ color: '#1D9E75', fontWeight: 600 }}>Criar sua conta no Junto →</a>
-        </div>
+      {/* Conteúdo */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {tab === 'feed' && <Feed treinos={treinos} loading={loading} onAbrirChat={abrirChat} onAtualizar={carregarTreinos} />}
+        {tab === 'criar' && <CriarTreino onCriado={() => { carregarTreinos(); setTab('feed') }} />}
+        {tab === 'grupos' && <Grupos />}
+        {tab === 'perfil' && <Perfil />}
       </div>
     </div>
   )
