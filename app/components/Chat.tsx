@@ -10,6 +10,13 @@ function fmtData(d: string) {
   return `${parseInt(dia)} ${MESES[parseInt(m) - 1]}`
 }
 
+function initials(nome: string) {
+  if (!nome) return '?'
+  const parts = nome.trim().split(' ')
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 function getCountdown(data: string, horario: string) {
   if (!data || !horario) return null
   const treino = new Date(`${data}T${horario}`)
@@ -22,6 +29,16 @@ function getCountdown(data: string, horario: string) {
   if (dias > 0) return `${dias}d ${horas}h ${mins}min`
   if (horas > 0) return `${horas}h ${mins}min`
   return `${mins}min`
+}
+
+type Participante = {
+  id: string
+  nome: string
+  avatar_url: string | null
+  pace_medio: string | null
+  nivel: string | null
+  bio: string | null
+  cidade: string | null
 }
 
 type Props = { treino: Treino; onVoltar: () => void }
@@ -43,6 +60,9 @@ export default function Chat({ treino, onVoltar }: Props) {
   const [avaliacao, setAvaliacao] = useState(0)
   const [avaliacaoFeita, setAvaliacaoFeita] = useState(false)
   const [salvandoAvaliacao, setSalvandoAvaliacao] = useState(false)
+  const [participantes, setParticipantes] = useState<Participante[]>([])
+  const [perfilAberto, setPerfilAberto] = useState<Participante | null>(null)
+  const [abaAtiva, setAbaAtiva] = useState<'chat' | 'participantes'>('chat')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const hoje = new Date().toISOString().split('T')[0]
@@ -60,6 +80,7 @@ export default function Chat({ treino, onVoltar }: Props) {
       }
     })
     carregarMensagens()
+    carregarParticipantes()
 
     const channel = supabase
       .channel('mensagens-' + treino.id)
@@ -68,7 +89,6 @@ export default function Chat({ treino, onVoltar }: Props) {
       )
       .subscribe()
 
-    // Countdown timer
     const timer = setInterval(() => {
       setCountdown(getCountdown(treino.data, treino.horario))
     }, 1000)
@@ -102,6 +122,17 @@ export default function Chat({ treino, onVoltar }: Props) {
       .eq('treino_id', treino.id)
       .order('criado_em', { ascending: true })
     if (data) setMensagens(data)
+  }
+
+  async function carregarParticipantes() {
+    const { data } = await supabase
+      .from('inscricoes')
+      .select('usuario_id, usuarios(id, nome, avatar_url, pace_medio, nivel, bio, cidade)')
+      .eq('treino_id', treino.id)
+    if (data) {
+      const ps = data.map((d: any) => d.usuarios).filter(Boolean)
+      setParticipantes(ps)
+    }
   }
 
   async function enviar() {
@@ -165,6 +196,42 @@ export default function Chat({ treino, onVoltar }: Props) {
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#fff', fontFamily: "'Barlow', sans-serif" }}>
 
+      {/* Mini perfil modal */}
+      {perfilAberto && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setPerfilAberto(null)}>
+          <div style={{ background: '#fff', borderRadius: '16px 16px 0 0', padding: 24, width: '100%', maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              {perfilAberto.avatar_url
+                ? <img src={perfilAberto.avatar_url} alt={perfilAberto.nome} style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover' }} />
+                : <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#E1F5EE', color: '#085041', fontSize: 20, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(perfilAberto.nome)}</div>
+              }
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: '#111' }}>{perfilAberto.nome}</div>
+                {perfilAberto.cidade && <div style={{ fontSize: 13, color: '#888' }}>📍 {perfilAberto.cidade}</div>}
+              </div>
+            </div>
+            {perfilAberto.bio && <div style={{ fontSize: 13, color: '#666', fontStyle: 'italic', marginBottom: 12 }}>"{perfilAberto.bio}"</div>}
+            <div style={{ display: 'flex', gap: 10 }}>
+              {perfilAberto.pace_medio && (
+                <div style={{ flex: 1, background: '#f9f9f9', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#1D9E75' }}>{perfilAberto.pace_medio}</div>
+                  <div style={{ fontSize: 11, color: '#aaa', fontWeight: 600 }}>Pace médio</div>
+                </div>
+              )}
+              {perfilAberto.nivel && (
+                <div style={{ flex: 1, background: '#f9f9f9', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#1D9E75', textTransform: 'capitalize' }}>{perfilAberto.nivel}</div>
+                  <div style={{ fontSize: 11, color: '#aaa', fontWeight: 600 }}>Nível</div>
+                </div>
+              )}
+            </div>
+            <button onClick={() => setPerfilAberto(null)} style={{ width: '100%', marginTop: 16, padding: 11, border: '1px solid #eee', borderRadius: 8, fontSize: 14, color: '#888', background: 'none', cursor: 'pointer', fontFamily: "'Barlow', sans-serif", fontWeight: 600 }}>
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 10, position: 'sticky', top: 0, background: '#fff', zIndex: 10 }}>
         <button onClick={onVoltar} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: 22, padding: 0, lineHeight: 1 }}>←</button>
@@ -174,7 +241,7 @@ export default function Chat({ treino, onVoltar }: Props) {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={compartilhar} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #ddd', color: copiado ? '#1D9E75' : '#888', background: copiado ? '#E1F5EE' : '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
-            {copiado ? '✅ Copiado!' : '📤'}
+            {copiado ? '✅' : '📤'}
           </button>
           {isInscrito && (
             <button onClick={sairDoTreino} disabled={saindo} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
@@ -230,7 +297,7 @@ export default function Chat({ treino, onVoltar }: Props) {
         </div>
       )}
 
-      {/* Avaliação pós-treino */}
+      {/* Avaliação */}
       {checkinFeito && !avaliacaoFeita && (
         <div style={{ padding: '12px 16px', background: '#F8F8F8', borderBottom: '1px solid #eee' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 8 }}>⭐ Como foi o treino?</div>
@@ -252,44 +319,85 @@ export default function Chat({ treino, onVoltar }: Props) {
         </div>
       )}
 
-      {/* Mensagens */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 300 }}>
-        {mensagens.length === 0 && (
-          <div style={{ textAlign: 'center', color: '#aaa', fontSize: 13, margin: 'auto' }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
-            Nenhuma mensagem ainda. Seja o primeiro!
-          </div>
-        )}
-        {mensagens.map((m) => {
-          const mine = m.usuario_id === userId
-          return (
-            <div key={m.id} style={{ maxWidth: '78%', alignSelf: mine ? 'flex-end' : 'flex-start', textAlign: mine ? 'right' : 'left' }}>
-              {!mine && <div style={{ fontSize: 11, color: '#aaa', marginBottom: 3, fontWeight: 600 }}>{m.usuarios?.nome ?? 'Corredor'}</div>}
-              <div style={{ padding: '8px 12px', borderRadius: mine ? '12px 4px 12px 12px' : '4px 12px 12px 12px', fontSize: 14, fontWeight: 500, lineHeight: 1.45, background: mine ? '#1D9E75' : '#f0f0f0', color: mine ? '#fff' : '#111' }}>
-                {m.texto}
-              </div>
-              <div style={{ fontSize: 10, color: '#bbb', marginTop: 3, fontWeight: 500 }}>
-                {new Date(m.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-          )
-        })}
-        <div ref={bottomRef} />
+      {/* Abas chat / participantes */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #eee' }}>
+        {[
+          { id: 'chat', label: '💬 Chat' },
+          { id: 'participantes', label: `👟 Participantes (${participantes.length})` },
+        ].map(a => (
+          <button key={a.id} onClick={() => setAbaAtiva(a.id as any)} style={{ flex: 1, padding: '10px', fontSize: 13, fontWeight: abaAtiva === a.id ? 700 : 500, color: abaAtiva === a.id ? '#1D9E75' : '#888', background: 'none', border: 'none', borderBottom: `2px solid ${abaAtiva === a.id ? '#1D9E75' : 'transparent'}`, cursor: 'pointer', fontFamily: "'Barlow', sans-serif" }}>
+            {a.label}
+          </button>
+        ))}
       </div>
 
-      {/* Input */}
-      <div style={{ padding: '10px 16px', borderTop: '1px solid #eee', display: 'flex', gap: 8, alignItems: 'center', background: '#fff', position: 'sticky', bottom: 0 }}>
-        <input
-          value={texto}
-          onChange={e => setTexto(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && enviar()}
-          placeholder="Mensagem..."
-          style={{ flex: 1, padding: '9px 14px', border: '1px solid #ddd', borderRadius: 20, fontSize: 14, fontWeight: 500, background: '#f9f9f9', color: '#111', outline: 'none', fontFamily: "'Barlow', sans-serif" }}
-        />
-        <button onClick={enviar} disabled={enviando} style={{ width: 36, height: 36, borderRadius: '50%', background: '#1D9E75', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>
-          ➤
-        </button>
-      </div>
+      {/* Aba participantes */}
+      {abaAtiva === 'participantes' && (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {participantes.map(p => (
+            <div key={p.id} onClick={() => setPerfilAberto(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: '#f9f9f9', borderRadius: 10, cursor: 'pointer' }}>
+              {p.avatar_url
+                ? <img src={p.avatar_url} alt={p.nome} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#E1F5EE', color: '#085041', fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials(p.nome)}</div>
+              }
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{p.nome}</div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+                  {p.pace_medio && `⚡ ${p.pace_medio} /km`}
+                  {p.nivel && ` · ${p.nivel}`}
+                </div>
+              </div>
+              <span style={{ fontSize: 18, color: '#ccc' }}>›</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Aba chat */}
+      {abaAtiva === 'chat' && (
+        <>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 200 }}>
+            {mensagens.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#aaa', fontSize: 13, margin: 'auto' }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
+                Nenhuma mensagem ainda. Seja o primeiro!
+              </div>
+            )}
+            {mensagens.map((m) => {
+              const mine = m.usuario_id === userId
+              return (
+                <div key={m.id} style={{ maxWidth: '78%', alignSelf: mine ? 'flex-end' : 'flex-start', textAlign: mine ? 'right' : 'left' }}>
+                  {!mine && (
+                    <div onClick={() => { const p = participantes.find(x => x.id === m.usuario_id); if (p) setPerfilAberto(p) }} style={{ fontSize: 11, color: '#1D9E75', marginBottom: 3, fontWeight: 600, cursor: 'pointer' }}>
+                      {m.usuarios?.nome ?? 'Corredor'}
+                    </div>
+                  )}
+                  <div style={{ padding: '8px 12px', borderRadius: mine ? '12px 4px 12px 12px' : '4px 12px 12px 12px', fontSize: 14, fontWeight: 500, lineHeight: 1.45, background: mine ? '#1D9E75' : '#f0f0f0', color: mine ? '#fff' : '#111' }}>
+                    {m.texto}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#bbb', marginTop: 3, fontWeight: 500 }}>
+                    {new Date(m.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              )
+            })}
+            <div ref={bottomRef} />
+          </div>
+
+          <div style={{ padding: '10px 16px', borderTop: '1px solid #eee', display: 'flex', gap: 8, alignItems: 'center', background: '#fff', position: 'sticky', bottom: 0 }}>
+            <input
+              value={texto}
+              onChange={e => setTexto(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && enviar()}
+              placeholder="Mensagem..."
+              style={{ flex: 1, padding: '9px 14px', border: '1px solid #ddd', borderRadius: 20, fontSize: 14, fontWeight: 500, background: '#f9f9f9', color: '#111', outline: 'none', fontFamily: "'Barlow', sans-serif" }}
+            />
+            <button onClick={enviar} disabled={enviando} style={{ width: 36, height: 36, borderRadius: '50%', background: '#1D9E75', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>
+              ➤
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
