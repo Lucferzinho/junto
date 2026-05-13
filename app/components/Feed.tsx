@@ -31,6 +31,16 @@ function diaSemana(data: string) {
   return new Date(data + 'T12:00:00').getDay()
 }
 
+function isHoje(data: string) {
+  return data === new Date().toISOString().split('T')[0]
+}
+
+function isAmanha(data: string) {
+  const amanha = new Date()
+  amanha.setDate(amanha.getDate() + 1)
+  return data === amanha.toISOString().split('T')[0]
+}
+
 const TOM_STYLE: Record<string, { bg: string; color: string }> = {
   'Leve e papo':    { bg: '#E6F1FB', color: '#0C447C' },
   'Focado':         { bg: '#FBEAF0', color: '#72243E' },
@@ -40,6 +50,14 @@ const TOM_STYLE: Record<string, { bg: string; color: string }> = {
 const TIPOS = ['Long run','Intervalado','Progressivo','Tempo run','Regenerativo','Corrida livre']
 const TOMS = ['Leve e papo','Focado','Qualquer nível']
 const PACES = ['4:00–4:30','4:30–5:00','5:00–5:30','5:30–6:00','6:00–6:30','6:30+']
+
+const CLIMA_ICONS: Record<string, string> = {
+  '01d': '☀️', '01n': '🌙', '02d': '⛅', '02n': '⛅',
+  '03d': '☁️', '03n': '☁️', '04d': '☁️', '04n': '☁️',
+  '09d': '🌧️', '09n': '🌧️', '10d': '🌦️', '10n': '🌧️',
+  '11d': '⛈️', '11n': '⛈️', '13d': '❄️', '13n': '❄️',
+  '50d': '🌫️', '50n': '🌫️',
+}
 
 type Props = {
   treinos: Treino[]
@@ -53,6 +71,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
   const [inscricoes, setInscricoes] = useState<Record<string, string>>({})
   const [listaEspera, setListaEspera] = useState<Record<string, string>>({})
   const [carregando, setCarregando] = useState<string | null>(null)
+  const [climas, setClimas] = useState<Record<string, any>>({})
 
   const [filtroTipo, setFiltroTipo] = useState('')
   const [filtroTom, setFiltroTom] = useState('')
@@ -71,6 +90,29 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
       }
     })
   }, [treinos])
+
+  useEffect(() => {
+    // Busca clima para treinos de hoje e amanhã
+    treinos.forEach(r => {
+      if ((isHoje(r.data) || isAmanha(r.data)) && !climas[r.id]) {
+        buscarClima(r)
+      }
+    })
+  }, [treinos])
+
+  async function buscarClima(treino: Treino) {
+    const key = process.env.NEXT_PUBLIC_OPENWEATHER_KEY
+    if (!key || !treino.local) return
+    try {
+      const geo = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(treino.local)},BR&limit=1&appid=${key}`)
+      const geoData = await geo.json()
+      if (!geoData[0]) return
+      const { lat, lon } = geoData[0]
+      const weather = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${key}&units=metric&lang=pt_br`)
+      const wData = await weather.json()
+      setClimas(prev => ({ ...prev, [treino.id]: wData }))
+    } catch {}
+  }
 
   async function carregarInscricoes(uid: string) {
     const { data } = await supabase.from('inscricoes').select('id, treino_id').eq('usuario_id', uid)
@@ -202,56 +244,40 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
 
         {mostrarFiltros && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-            {/* Localização */}
             <div>
               <div style={{ fontSize: 11, color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Localização</div>
               <input value={filtroLocal} onChange={e => setFiltroLocal(e.target.value)} placeholder="Ex: Aterro, Ipanema, Lagoa..." style={{ width: '100%', padding: '7px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: "'Barlow', sans-serif", boxSizing: 'border-box' }} />
             </div>
-
-            {/* Dia da semana */}
             <div>
               <div style={{ fontSize: 11, color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Dia da semana</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {DIAS_SEMANA.map((d, i) => pill(d, filtroDia === i, () => setFiltroDia(filtroDia === i ? null : i)))}
               </div>
             </div>
-
-            {/* Pace */}
             <div>
               <div style={{ fontSize: 11, color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Pace</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {PACES.map(p => pill(p, filtroPace === p, () => setFiltroPace(filtroPace === p ? '' : p)))}
               </div>
             </div>
-
-            {/* Tipo */}
             <div>
               <div style={{ fontSize: 11, color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Tipo de treino</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {TIPOS.map(t => pill(t, filtroTipo === t, () => setFiltroTipo(filtroTipo === t ? '' : t)))}
               </div>
             </div>
-
-            {/* Tom */}
             <div>
               <div style={{ fontSize: 11, color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 6 }}>Tom do treino</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {TOMS.map(t => {
-                  const s = TOM_STYLE[t]
-                  return pill(t, filtroTom === t, () => setFiltroTom(filtroTom === t ? '' : t), s.bg, s.color)
-                })}
+                {TOMS.map(t => { const s = TOM_STYLE[t]; return pill(t, filtroTom === t, () => setFiltroTom(filtroTom === t ? '' : t), s.bg, s.color) })}
               </div>
             </div>
-
-            {/* Iniciantes */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Só abertos a iniciantes</span>
               <div onClick={() => setFiltroIniciantes(!filtroIniciantes)} style={{ width: 36, height: 20, background: filtroIniciantes ? '#1D9E75' : '#ddd', borderRadius: 20, position: 'relative', cursor: 'pointer', transition: 'background .2s' }}>
                 <div style={{ position: 'absolute', width: 14, height: 14, background: '#fff', borderRadius: '50%', top: 3, left: filtroIniciantes ? 19 : 3, transition: 'left .2s' }} />
               </div>
             </div>
-
             {temFiltroAtivo && (
               <button onClick={limparFiltros} style={{ fontSize: 12, color: '#cc3333', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, textAlign: 'left', padding: 0, fontFamily: "'Barlow', sans-serif" }}>
                 ✕ Limpar filtros
@@ -278,9 +304,10 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
         const naEspera = !!listaEspera[r.id]
         const nomeHost = (r as any).usuarios?.nome || 'Corredor'
         const avatarUrl = (r as any).usuarios?.avatar_url
-        const hoje = new Date().toISOString().split('T')[0]
-        const isHoje = r.data === hoje
+        const hoje = isHoje(r.data)
+        const amanha = isAmanha(r.data)
         const encerrado = inscricoesEncerradas(r.data, r.horario)
+        const clima = climas[r.id]
 
         return (
           <div key={r.id} onClick={() => onAbrirChat(r)} style={{ padding: 16, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
@@ -298,7 +325,8 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', flexShrink: 0 }}>
-                {isHoje && <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#FFF3E0', color: '#E65100', fontWeight: 700 }}>🔥 Hoje!</span>}
+                {hoje && <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#FFF3E0', color: '#E65100', fontWeight: 700 }}>🔥 Hoje!</span>}
+                {amanha && <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#F3E5F5', color: '#6A1B9A', fontWeight: 700 }}>📅 Amanhã</span>}
                 {encerrado
                   ? <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: '#f0f0f0', color: '#888', fontWeight: 700 }}>Inscrições encerradas</span>
                   : <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: full ? '#FAEEDA' : '#E1F5EE', color: full ? '#633806' : '#085041', fontWeight: 700 }}>{full ? 'Lotado' : 'Vagas abertas'}</span>
@@ -308,7 +336,7 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
               {[
                 { e: '📅', t: `${fmtData(r.data)} · ${r.horario?.slice(0,5)}` },
                 { e: '📍', t: r.local },
@@ -318,6 +346,15 @@ export default function Feed({ treinos, loading, onAbrirChat, onAtualizar }: Pro
                 <span key={m.t} style={{ fontSize: 13, fontWeight: 600, color: '#444', display: 'flex', alignItems: 'center', gap: 4 }}>{m.e} {m.t}</span>
               ))}
             </div>
+
+            {/* Clima */}
+            {clima && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#f9f9f9', borderRadius: 8, marginBottom: 10, fontSize: 12, color: '#555', fontWeight: 600 }}>
+                <span style={{ fontSize: 18 }}>{CLIMA_ICONS[clima.weather?.[0]?.icon] || '🌡️'}</span>
+                <span>{Math.round(clima.main?.temp)}°C · {clima.weather?.[0]?.description}</span>
+                {clima.main?.humidity && <span style={{ color: '#aaa' }}>💧 {clima.main.humidity}%</span>}
+              </div>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

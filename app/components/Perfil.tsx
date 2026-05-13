@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase, Usuario } from '../../lib/supabase'
 
+type Ranking = { nome: string; avatar_url: string | null; total: number }
+
 export default function Perfil() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [email, setEmail] = useState('')
@@ -18,14 +20,18 @@ export default function Perfil() {
   const [cidade, setCidade] = useState('')
   const [pace, setPace] = useState('')
   const [nivel, setNivel] = useState('iniciante')
+  const [bio, setBio] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [totalFeitos, setTotalFeitos] = useState(0)
   const [totalInscritos, setTotalInscritos] = useState(0)
   const [uploadando, setUploadando] = useState(false)
+  const [ranking, setRanking] = useState<Ranking[]>([])
+  const [posicao, setPosicao] = useState<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     carregarPerfil()
+    carregarRanking()
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       if (session) carregarPerfil()
       else { setUsuario(null); setEmail(''); setLoading(false) }
@@ -45,6 +51,7 @@ export default function Perfil() {
       setCidade(data.cidade ?? '')
       setPace(data.pace_medio ?? '')
       setNivel(data.nivel ?? 'iniciante')
+      setBio(data.bio ?? '')
     }
     const { count: cks } = await supabase.from('checkins').select('id', { count: 'exact' }).eq('usuario_id', user.id)
     setTotalFeitos(cks ?? 0)
@@ -53,27 +60,52 @@ export default function Perfil() {
     setLoading(false)
   }
 
+  async function carregarRanking() {
+    const { data } = await supabase
+      .from('checkins')
+      .select('usuario_id, usuarios(nome, avatar_url)')
+    if (!data) return
+
+    const contagem: Record<string, { nome: string; avatar_url: string | null; total: number }> = {}
+    data.forEach((c: any) => {
+      const uid = c.usuario_id
+      const u = c.usuarios
+      if (!contagem[uid]) contagem[uid] = { nome: u?.nome || 'Corredor', avatar_url: u?.avatar_url || null, total: 0 }
+      contagem[uid].total++
+    })
+
+    const sorted = Object.entries(contagem)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 10)
+      .map(([, v]) => v)
+
+    setRanking(sorted)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const pos = Object.entries(contagem)
+        .sort((a, b) => b[1].total - a[1].total)
+        .findIndex(([uid]) => uid === user.id)
+      if (pos !== -1) setPosicao(pos + 1)
+    }
+  }
+
   async function uploadAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-
     const ext = file.name.split('.').pop()?.toLowerCase()
     if (ext === 'heic' || ext === 'heif') {
       alert('Formato HEIC não é suportado. Por favor escolha uma foto JPG ou PNG.')
       return
     }
-
     setUploadando(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
     const path = `${user.id}/avatar.${ext}`
     const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
     if (upErr) { alert('Erro ao fazer upload: ' + upErr.message); setUploadando(false); return }
-
     const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
     const avatarUrl = urlData.publicUrl + '?t=' + Date.now()
-
     await supabase.from('usuarios').upsert({ id: user.id, avatar_url: avatarUrl })
     await carregarPerfil()
     setUploadando(false)
@@ -107,13 +139,19 @@ export default function Perfil() {
     setSalvando(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { error } = await supabase.from('usuarios').upsert({ id: user.id, nome, email: user.email, cidade, pace_medio: pace, nivel })
+    const { error } = await supabase.from('usuarios').upsert({ id: user.id, nome, email: user.email, cidade, pace_medio: pace, nivel, bio })
     if (!error) { await carregarPerfil(); setEditando(false) }
     else alert('Erro ao salvar: ' + error.message)
     setSalvando(false)
   }
 
   const inp = { width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, outline: 'none', marginBottom: 10, fontFamily: "'Barlow', sans-serif" } as React.CSSProperties
+
+  function initials(n: string) {
+    const parts = n.trim().split(' ')
+    if (parts.length === 1) return parts[0].slice(0,2).toUpperCase()
+    return (parts[0][0] + parts[parts.length-1][0]).toUpperCase()
+  }
 
   if (loading) return (
     <div style={{ padding: 40, textAlign: 'center', color: '#aaa', fontFamily: "'Barlow', sans-serif" }}>
@@ -145,38 +183,45 @@ export default function Perfil() {
     </div>
   )
 
-  const inits = (usuario?.nome || email).slice(0, 2).toUpperCase()
+  const inits = initials(usuario?.nome || email)
 
   return (
     <div style={{ fontFamily: "'Barlow', sans-serif" }}>
+      {/* Topo */}
       <div style={{ padding: '24px 16px', textAlign: 'center', borderBottom: '1px solid #eee' }}>
         <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto 10px', cursor: 'pointer' }} onClick={() => fileRef.current?.click()}>
           {usuario?.avatar_url
             ? <img src={usuario.avatar_url} alt="avatar" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #E1F5EE' }} />
-            : <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#E1F5EE', color: '#085041', fontSize: 28, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #E1F5EE' }}>
-                {inits}
-              </div>
+            : <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#E1F5EE', color: '#085041', fontSize: 28, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #E1F5EE' }}>{inits}</div>
           }
           <div style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, background: '#1D9E75', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', fontSize: 14 }}>
             {uploadando ? '⏳' : '📷'}
           </div>
         </div>
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }} onChange={uploadAvatar} />
-        <div style={{ fontSize: 11, color: '#aaa', marginBottom: 8 }}>Use JPG ou PNG</div>
+        <div style={{ fontSize: 11, color: '#aaa', marginBottom: 6 }}>Use JPG ou PNG</div>
 
-        <div style={{ fontSize: 20, fontWeight: 800, color: '#111', marginBottom: 4 }}>{usuario?.nome || 'Sem nome ainda'}</div>
-        <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>{email}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 4 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#111' }}>{usuario?.nome || 'Sem nome ainda'}</div>
+          {(usuario as any)?.verificado && <span title="Perfil verificado" style={{ fontSize: 16 }}>✅</span>}
+        </div>
+        {usuario?.cidade && <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>📍 {usuario.cidade}</div>}
+        {(usuario as any)?.bio && <div style={{ fontSize: 13, color: '#666', marginBottom: 8, fontStyle: 'italic' }}>"{(usuario as any).bio}"</div>}
+        <div style={{ fontSize: 13, color: '#aaa', marginBottom: 12 }}>{email}</div>
+        {posicao && <div style={{ fontSize: 12, color: '#1D9E75', fontWeight: 700, marginBottom: 10 }}>🏆 #{posicao} no ranking de presença</div>}
         <button onClick={() => setEditando(!editando)} style={{ fontSize: 13, padding: '6px 18px', border: '1px solid #1D9E75', color: '#1D9E75', background: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
           {editando ? 'Cancelar' : '✏️ Editar perfil'}
         </button>
       </div>
 
+      {/* Editar */}
       {editando && (
         <div style={{ padding: 16, borderBottom: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[
             { label: 'Nome', value: nome, set: setNome, placeholder: 'Seu nome' },
             { label: 'Cidade', value: cidade, set: setCidade, placeholder: 'Ex: Rio de Janeiro' },
             { label: 'Pace médio', value: pace, set: setPace, placeholder: 'Ex: 5:30' },
+            { label: 'Bio', value: bio, set: setBio, placeholder: 'Ex: Maratonista carioca, amo o Aterro!' },
           ].map(f => (
             <div key={f.label}>
               <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4, fontWeight: 600 }}>{f.label}</label>
@@ -197,6 +242,7 @@ export default function Perfil() {
         </div>
       )}
 
+      {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #eee' }}>
         {[
           { n: totalFeitos, l: 'Treinos feitos' },
@@ -210,12 +256,29 @@ export default function Perfil() {
         ))}
       </div>
 
-      {usuario?.cidade && (
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>📍</span><span style={{ fontSize: 14, color: '#444', fontWeight: 500 }}>{usuario.cidade}</span>
+      {/* Ranking */}
+      {ranking.length > 0 && (
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid #eee' }}>
+          <div style={{ fontSize: 12, color: '#aaa', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 12 }}>🏆 Ranking de presença</div>
+          {ranking.map((r, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < ranking.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+              <div style={{ width: 24, fontSize: 14, fontWeight: 800, color: i === 0 ? '#FFB800' : i === 1 ? '#888' : i === 2 ? '#CD7F32' : '#aaa', textAlign: 'center' }}>
+                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}°`}
+              </div>
+              {r.avatar_url
+                ? <img src={r.avatar_url} alt={r.nome} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+                : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#E1F5EE', color: '#085041', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{initials(r.nome)}</div>
+              }
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{r.nome}</div>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1D9E75' }}>{r.total} treino{r.total !== 1 ? 's' : ''}</div>
+            </div>
+          ))}
         </div>
       )}
 
+      {/* Logout */}
       <div style={{ padding: 16 }}>
         <button onClick={logout} style={{ width: '100%', padding: 11, border: '1px solid #eee', borderRadius: 8, fontSize: 14, color: '#888', background: 'none', cursor: 'pointer', fontFamily: "'Barlow', sans-serif", fontWeight: 600 }}>
           Sair da conta
