@@ -10,6 +10,20 @@ function fmtData(d: string) {
   return `${parseInt(dia)} ${MESES[parseInt(m) - 1]}`
 }
 
+function getCountdown(data: string, horario: string) {
+  if (!data || !horario) return null
+  const treino = new Date(`${data}T${horario}`)
+  const agora = new Date()
+  const diff = treino.getTime() - agora.getTime()
+  if (diff <= 0) return null
+  const dias = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const horas = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+  if (dias > 0) return `${dias}d ${horas}h ${mins}min`
+  if (horas > 0) return `${horas}h ${mins}min`
+  return `${mins}min`
+}
+
 type Props = { treino: Treino; onVoltar: () => void }
 
 export default function Chat({ treino, onVoltar }: Props) {
@@ -25,10 +39,15 @@ export default function Chat({ treino, onVoltar }: Props) {
   const [checkinFeito, setCheckinFeito] = useState(false)
   const [fazendoCheckin, setFazendoCheckin] = useState(false)
   const [copiado, setCopiado] = useState(false)
+  const [countdown, setCountdown] = useState<string | null>(null)
+  const [avaliacao, setAvaliacao] = useState(0)
+  const [avaliacaoFeita, setAvaliacaoFeita] = useState(false)
+  const [salvandoAvaliacao, setSalvandoAvaliacao] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const hoje = new Date().toISOString().split('T')[0]
   const isHoje = treino.data === hoje
+  const treinoPassou = new Date(`${treino.data}T${treino.horario}`) < new Date()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -37,6 +56,7 @@ export default function Chat({ treino, onVoltar }: Props) {
         setIsCriador(data.user.id === treino.criador_id)
         verificarInscricao(data.user.id)
         verificarCheckin(data.user.id)
+        verificarAvaliacao(data.user.id)
       }
     })
     carregarMensagens()
@@ -48,7 +68,12 @@ export default function Chat({ treino, onVoltar }: Props) {
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Countdown timer
+    const timer = setInterval(() => {
+      setCountdown(getCountdown(treino.data, treino.horario))
+    }, 1000)
+
+    return () => { supabase.removeChannel(channel); clearInterval(timer) }
   }, [treino.id])
 
   useEffect(() => {
@@ -63,6 +88,11 @@ export default function Chat({ treino, onVoltar }: Props) {
   async function verificarCheckin(uid: string) {
     const { data } = await supabase.from('checkins').select('id').eq('treino_id', treino.id).eq('usuario_id', uid).single()
     if (data) setCheckinFeito(true)
+  }
+
+  async function verificarAvaliacao(uid: string) {
+    const { data } = await supabase.from('avaliacoes').select('id').eq('treino_id', treino.id).eq('usuario_id', uid).single()
+    if (data) setAvaliacaoFeita(true)
   }
 
   async function carregarMensagens() {
@@ -108,12 +138,23 @@ export default function Chat({ treino, onVoltar }: Props) {
     setFazendoCheckin(false)
   }
 
+  async function salvarAvaliacao() {
+    if (!userId || avaliacao === 0) return
+    setSalvandoAvaliacao(true)
+    const { error } = await supabase.from('avaliacoes').insert({ treino_id: treino.id, usuario_id: userId, nota: avaliacao })
+    if (error) { alert('Erro ao avaliar: ' + error.message); setSalvandoAvaliacao(false); return }
+    setAvaliacaoFeita(true)
+    setSalvandoAvaliacao(false)
+  }
+
   function compartilhar() {
-    const texto = `🏃 ${treino.titulo}\n📅 ${fmtData(treino.data)} às ${treino.horario?.slice(0,5)}\n📍 ${treino.local}\n🛣️ ${treino.km} km · ${treino.pace} /km\n\nVem correr junto! 👉 juntoapp.com.br`
+    const slug = (treino as any).slug
+    const url = slug ? `https://juntoapp.com.br/treino/${slug}` : 'https://juntoapp.com.br'
+    const txt = `🏃 ${treino.titulo}\n📅 ${fmtData(treino.data)} às ${treino.horario?.slice(0,5)}\n📍 ${treino.local}\n🛣️ ${treino.km} km · ${treino.pace} /km\n\nVem correr junto! 👉 ${url}`
     if (navigator.share) {
-      navigator.share({ title: treino.titulo, text: texto, url: 'https://juntoapp.com.br' })
+      navigator.share({ title: treino.titulo, text: txt, url })
     } else {
-      navigator.clipboard.writeText(texto)
+      navigator.clipboard.writeText(txt)
       setCopiado(true)
       setTimeout(() => setCopiado(false), 2000)
     }
@@ -132,9 +173,8 @@ export default function Chat({ treino, onVoltar }: Props) {
           <div style={{ fontSize: 11, color: '#aaa', fontWeight: 500 }}>{inscritos} participante{inscritos !== 1 ? 's' : ''} · {treino.local}</div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {/* Compartilhar */}
           <button onClick={compartilhar} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #ddd', color: copiado ? '#1D9E75' : '#888', background: copiado ? '#E1F5EE' : '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
-            {copiado ? '✅ Copiado!' : '📤 Compartilhar'}
+            {copiado ? '✅ Copiado!' : '📤'}
           </button>
           {isInscrito && (
             <button onClick={sairDoTreino} disabled={saindo} style={{ fontSize: 11, padding: '4px 10px', border: '1px solid #ddd', color: '#888', background: '#f9f9f9', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontFamily: "'Barlow', sans-serif" }}>
@@ -164,6 +204,13 @@ export default function Chat({ treino, onVoltar }: Props) {
         ))}
       </div>
 
+      {/* Countdown */}
+      {countdown && !treinoPassou && (
+        <div style={{ padding: '10px 16px', background: '#F0FDF9', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, color: '#1D9E75', fontWeight: 700 }}>⏱ Começa em {countdown}</span>
+        </div>
+      )}
+
       {/* Banner check-in */}
       {isHoje && isInscrito && (
         <div style={{ padding: '12px 16px', background: checkinFeito ? '#E1F5EE' : '#FFF3E0', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -180,6 +227,28 @@ export default function Chat({ treino, onVoltar }: Props) {
               {fazendoCheckin ? '...' : 'Fui correr! ✅'}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Avaliação pós-treino */}
+      {checkinFeito && !avaliacaoFeita && (
+        <div style={{ padding: '12px 16px', background: '#F8F8F8', borderBottom: '1px solid #eee' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 8 }}>⭐ Como foi o treino?</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {[1,2,3,4,5].map(n => (
+              <button key={n} onClick={() => setAvaliacao(n)} style={{ fontSize: 24, background: 'none', border: 'none', cursor: 'pointer', opacity: avaliacao >= n ? 1 : 0.3, transition: 'opacity .15s' }}>⭐</button>
+            ))}
+            {avaliacao > 0 && (
+              <button onClick={salvarAvaliacao} disabled={salvandoAvaliacao} style={{ marginLeft: 8, fontSize: 12, padding: '5px 14px', background: '#1D9E75', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontFamily: "'Barlow', sans-serif" }}>
+                {salvandoAvaliacao ? '...' : 'Enviar'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {avaliacaoFeita && checkinFeito && (
+        <div style={{ padding: '10px 16px', background: '#F0FDF9', borderBottom: '1px solid #eee', fontSize: 13, color: '#1D9E75', fontWeight: 600 }}>
+          ✅ Avaliação enviada! Obrigado pelo feedback.
         </div>
       )}
 
