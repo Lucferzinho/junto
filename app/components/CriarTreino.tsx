@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
 const TOMS = ['Leve e papo','Focado','Qualquer nÃ­vel']
-const PACES = ['Sem pace estimado','4:00â4:30','4:30â5:00','5:00â5:30','5:30â6:00','6:00â6:30','6:30+']
+const PACES = ['Sem pace estimado','4:00-4:30-5:00-5:30-6:00-6:30','6:30+']
 
 const TOM_SEL: Record<string, { bg: string; color: string; border: string }> = {
   'Leve e papo':    { bg: '#E6F1FB', color: '#0C447C', border: '#185FA5' },
